@@ -1,0 +1,54 @@
+# ------------------------------------------------------------------
+# 2BHK website — Apache configuration
+#
+# This app is a Next.js SERVER app (dynamic event pages + 60s ISR),
+# so it must run as a Node process:  npm run build && npm run start
+# Apache's job is only to sit in front and proxy traffic to it.
+#
+# cPanel note: if your host has "Setup Node.js App" (Passenger),
+# use that instead of the proxy block below — Passenger wires the
+# proxying itself and this file then only needs the HTTPS/security
+# sections.
+# ------------------------------------------------------------------
+
+Options -Indexes
+DirectorySlash Off
+
+RewriteEngine On
+
+# ---- force HTTPS ----
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ---- force non-www ----
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
+
+# ---- reverse proxy to the Next.js server ----
+# Requires mod_proxy + mod_proxy_http. Adjust the port if the Node
+# process runs elsewhere (default: npm start on 3000).
+RewriteCond %{REQUEST_URI} !^/\.well-known/
+RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
+
+# ---- security headers ----
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# ---- compression ----
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript application/json image/svg+xml
+</IfModule>
+
+# ---- long-lived caching for hashed static assets ----
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType video/mp4 "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 1 year"
+</IfModule>

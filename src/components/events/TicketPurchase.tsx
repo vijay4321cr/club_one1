@@ -1,0 +1,484 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import Reveal from "@/components/ui/Reveal";
+import Button from "@/components/ui/Button";
+import TransitionLink from "@/components/ui/TransitionLink";
+import { authFetch, ApiError } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
+import { inr, eventDateLong } from "@/lib/format";
+import type { RizztixEvent, RizztixOrder, RizztixConfirm, RizztixTicketLine } from "@/types";
+
+/* Razorpay checkout.js global (fallback provider) */
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
+
+let razorpayLoader: Promise<boolean> | null = null;
+function loadRazorpay(): Promise<boolean> {
+  if (window.Razorpay) return Promise.resolve(true);
+  razorpayLoader ??= new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => {
+      razorpayLoader = null;
+      resolve(false);
+    };
+    document.body.appendChild(s);
+  });
+  return razorpayLoader;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+interface Success {
+  bookingref: string;
+  qrcodeimage?: string;
+  amount: number;
+  lines: RizztixTicketLine[];
+}
+
+/** Multi-category ticket cart → confirmation modal → Cashfree/Razorpay. */
+export default function TicketPurchase({ event }: { event: RizztixEvent }) {
+  const router = useRouter();
+  const { session } = useAuth();
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState<Success | null>(null);
+
+  /* ---- selection + totals (fee math mirrors the backend payload) ---- */
+  const lines: RizztixTicketLine[] = useMemo(
+    () =>
+      event.tickets
+        .filter((t) => (qty[t._id] ?? 0) > 0)
+        .map((t) => ({
+          tickettypeid: t._id,
+          tickettype: t.tickettype,
+          quantity: qty[t._id],
+          ticketprice: t.ticketprice,
+        })),
+    [event.tickets, qty]
+  );
+  const totalQty = lines.reduce((s, l) => s + l.quantity, 0);
+  const subtotal = lines.reduce((s, l) => s + l.quantity * l.ticketprice, 0);
+  const feePercent = event.bookingpercentage ?? 0;
+  const baseprice = round2((subtotal * feePercent) / 100); // fee before GST
+  const bookingFee = round2(baseprice * 1.18); // fee incl. 18% GST
+  const total = round2(subtotal + bookingFee);
+
+  useEffect(() => {
+    document.body.style.overflow = showConfirm ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showConfirm]);
+
+  const setCount = (id: string, n: number) =>
+    setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(10, n)) }));
+
+  /* ---------------- payment ---------------- */
+
+  const pay = async () => {
+    if (!session) {
+      router.push(`/login?next=/event/${event._id}`);
+      return;
+    }
+    if (lines.length === 0 || paying) return;
+    setPaying(true);
+    setError("");
+
+    try {
+      // 1. create the order — multi-category payload with ticketlines
+      const order = await authFetch<RizztixOrder>("/order/buy", {
+        body: {
+          eventid: event._id,
+          noofticket: totalQty,
+          ticketprice: round2(subtotal / totalQty),
+          amount: total.toFixed(2),
+          currency: "INR",
+          isdelivery: false,
+          deliveryprice: 0,
+          tickettypeid: lines[0].tickettypeid,
+          gst: round2(baseprice * 0.09).toFixed(2),
+          baseamount: bookingFee.toFixed(2),
+          baseprice,
+          inqueue: false,
+          ticketlines: lines,
+        },
+      });
+
+      // 2. open the provider's checkout
+      const sessionId =
+        order.payment_session_id && order.payment_session_id !== "null"
+          ? order.payment_session_id
+          : undefined;
+
+      if (sessionId) {
+        /* ---- Cashfree ---- */
+        const { load } = await import("@cashfreepayments/cashfree-js");
+        const attempt = async (mode: "sandbox" | "production") => {
+          const cashfree = await load({ mode });
+          return cashfree.checkout({
+            paymentSessionId: sessionId,
+            redirectTarget: "_modal",
+          });
+        };
+
+        // the backend tells us which environment created the session
+        const configured: "sandbox" | "production" =
+          order.cashfreeEnv === "production"
+            ? "production"
+            : order.cashfreeEnv === "sandbox"
+              ? "sandbox"
+              : process.env.NEXT_PUBLIC_CASHFREE_MODE === "production"
+                ? "production"
+                : "sandbox";
+        let result = await attempt(configured);
+
+        // env mismatch (session created for the other Cashfree environment)
+        // surfaces as "payment_session_id_invalid" — retry in the other mode
+        const invalidSession = (r: typeof result) =>
+          !!r.error &&
+          /payment_session_id/i.test(
+            String((r.error as { code?: string }).code ?? r.error.message ?? "")
+          );
+        if (invalidSession(result)) {
+          result = await attempt(configured === "sandbox" ? "production" : "sandbox");
+        }
+
+        if (result.error) {
+          setError(result.error.message ?? "Payment was not completed.");
+        } else {
+          // MANDATORY: backend verifies the payment with Cashfree and issues
+          // the ticket — only after this succeeds do we show "confirmed"
+          try {
+            const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
+              body: {
+                order_id: order.orderid,
+                event_id: event._id,
+              },
+            });
+            setSuccess({
+              bookingref: confirmed.bookingref ?? order.bookingref,
+              qrcodeimage: confirmed.qrcodeimage,
+              amount: total,
+              lines,
+            });
+            setShowConfirm(false);
+          } catch (e) {
+            setError(
+              e instanceof ApiError
+                ? `Payment confirmation failed: ${e.message}. Your booking ref is ${order.bookingref} — if you were charged, check My Account or contact us.`
+                : `Payment confirmation failed — your booking ref is ${order.bookingref}. If you were charged, check My Account or contact us.`
+            );
+          }
+        }
+        setPaying(false);
+      } else if (order.razorpayKeyId) {
+        /* ---- Razorpay fallback ---- */
+        if (!(await loadRazorpay()) || !window.Razorpay) {
+          setError("Could not load the payment window — check your connection and try again.");
+          setPaying(false);
+          return;
+        }
+        const rzp = new window.Razorpay({
+          key: order.razorpayKeyId,
+          order_id: order.orderid,
+          amount: Math.round(total * 100),
+          currency: order.currency ?? "INR",
+          name: "2BHK — Bar ‹Hauté› Kitchen",
+          description: `${event.title} · ${totalQty} ticket${totalQty > 1 ? "s" : ""}`,
+          prefill: {
+            name: session.user.fullname,
+            email: session.user.email,
+            contact: session.user.phone,
+          },
+          theme: { color: "#e10600" },
+          modal: { ondismiss: () => setPaying(false) },
+          handler: async (resp: {
+            razorpay_order_id: string;
+            razorpay_payment_id: string;
+            razorpay_signature: string;
+          }) => {
+            try {
+              const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
+                body: {
+                  event_id: event._id,
+                  razorpay_order_id: resp.razorpay_order_id,
+                  razorpay_payment_id: resp.razorpay_payment_id,
+                  razorpay_signature: resp.razorpay_signature,
+                },
+              });
+              setSuccess({
+                bookingref: confirmed.bookingref ?? order.bookingref,
+                qrcodeimage: confirmed.qrcodeimage,
+                amount: total,
+                lines,
+              });
+              setShowConfirm(false);
+            } catch (e) {
+              setError(
+                e instanceof ApiError
+                  ? `Payment went through but confirmation failed: ${e.message}. Your booking ref is ${order.bookingref}.`
+                  : "Payment confirmation failed — check My Account or contact us."
+              );
+            } finally {
+              setPaying(false);
+            }
+          },
+        });
+        rzp.open();
+      } else {
+        setError("The box office didn't return a payment method — please try again later.");
+        setPaying(false);
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        router.push(`/login?next=/event/${event._id}`);
+      } else {
+        setError(e instanceof ApiError ? e.message : "Could not start the booking — try again.");
+      }
+      setPaying(false);
+    }
+  };
+
+  /* ---------------- success panel ---------------- */
+  if (success) {
+    return (
+      <Reveal>
+        <div className="rounded-sm border border-line p-8 text-center md:p-12">
+          <p className="label mb-3 !text-primary">Booking confirmed</p>
+          <h3 className="h-display text-3xl md:text-4xl">See you on the floor.</h3>
+          <p className="mt-3 text-sm text-muted">
+            {success.lines.map((l) => `${l.tickettype} × ${l.quantity}`).join(" · ")} ·{" "}
+            {inr(success.amount)} · Ref <span className="text-cream">{success.bookingref}</span>
+          </p>
+          {success.qrcodeimage && (
+            <div className="relative mx-auto mt-8 h-44 w-44 overflow-hidden rounded-sm bg-cream p-2">
+              <Image
+                src={success.qrcodeimage}
+                alt="Entry QR code"
+                fill
+                sizes="176px"
+                className="object-contain"
+              />
+            </div>
+          )}
+          <p className="label mt-4">Show this at the door — also saved in My Account</p>
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <Button href="/account">My bookings</Button>
+            <Button href="/#events" variant="outline">
+              More events
+            </Button>
+          </div>
+        </div>
+      </Reveal>
+    );
+  }
+
+  /* ---------------- ticket list + cart bar ---------------- */
+  return (
+    <>
+      <Reveal>
+        <div className="mb-6 flex items-baseline justify-between border-b border-line pb-4">
+          <p className="label">Tickets</p>
+          {event.bookingend && (
+            <p className="hidden text-xs text-muted md:block">
+              Booking closes {eventDateLong(event.bookingend)}
+            </p>
+          )}
+        </div>
+      </Reveal>
+
+      <div className="divide-y divide-line">
+        {event.tickets.map((t, i) => {
+          const unavailable = t.soldout || t.ticketstatus.toUpperCase() !== "AVAILABLE";
+          const n = qty[t._id] ?? 0;
+          return (
+            <Reveal key={t._id} delay={i * 0.06}>
+              <div className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="font-display text-xl font-medium uppercase md:text-2xl">
+                    {t.tickettype}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">
+                    {t.categorydesc}
+                    {t.passesPerUnit > 1 && ` · admits ${t.passesPerUnit}`}
+                    {t.coverAmount > 0 && ` · ${inr(t.coverAmount)} cover included`}
+                  </p>
+                </div>
+
+                {unavailable ? (
+                  <span className="label shrink-0 rounded-full border border-line px-4 py-2">
+                    Sold out
+                  </span>
+                ) : (
+                  <div className="flex shrink-0 items-center gap-5">
+                    <span className="h-display w-24 text-right text-xl md:text-2xl">
+                      {inr(n > 0 ? t.ticketprice * n : t.ticketprice)}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setCount(t._id, n - 1)}
+                        disabled={n === 0}
+                        aria-label={`Fewer ${t.tickettype} tickets`}
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center font-display text-lg tabular-nums">
+                        {n}
+                      </span>
+                      <button
+                        onClick={() => setCount(t._id, n + 1)}
+                        aria-label={`More ${t.tickettype} tickets`}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-cream ${
+                          n > 0 ? "border-primary text-primary" : "border-line"
+                        }`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Reveal>
+          );
+        })}
+      </div>
+
+      {error && !showConfirm && (
+        <p className="mt-6 text-sm leading-relaxed text-primary">{error}</p>
+      )}
+      {!session && (
+        <Reveal>
+          <p className="mt-6 text-xs leading-relaxed text-muted">
+            You&apos;ll be asked to sign in with your mobile number before payment.
+          </p>
+        </Reveal>
+      )}
+
+      {/* sticky cart bar */}
+      {totalQty > 0 && (
+        <div className="sticky bottom-4 z-30 mt-8">
+          <div className="mx-auto flex max-w-xl items-center justify-between gap-4 rounded-full border border-line bg-elevated/95 py-3 pl-6 pr-3 shadow-lg shadow-black/40 backdrop-blur-md">
+            <p className="text-sm">
+              <span className="font-display font-medium uppercase">
+                {totalQty} ticket{totalQty > 1 ? "s" : ""}
+              </span>
+              <span className="text-muted"> · {inr(subtotal)}</span>
+            </p>
+            <button
+              onClick={() => setShowConfirm(true)}
+              className="rounded-full bg-primary px-6 py-3 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
+            >
+              Review & Buy
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* confirmation modal */}
+      {showConfirm && (
+        <div
+          className="fixed inset-0 z-70 flex items-center justify-center bg-coal/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Booking confirmation"
+          onClick={() => !paying && setShowConfirm(false)}
+        >
+          <div
+            data-lenis-prevent
+            className="max-h-[92svh] w-full max-w-md overflow-y-auto rounded-md border border-line bg-surface p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* header */}
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-cream/40 text-cream">
+                  ✓
+                </span>
+                <p className="font-display text-lg font-semibold uppercase tracking-wide">
+                  Confirmation
+                </p>
+              </div>
+              <button
+                onClick={() => !paying && setShowConfirm(false)}
+                aria-label="Close"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* summary card */}
+            <div className="rounded-md border-l-2 border-cream/60 bg-elevated p-5">
+              <div className="space-y-3">
+                {lines.map((l) => (
+                  <div key={l.tickettypeid} className="flex justify-between gap-4 text-sm">
+                    <span className="font-display font-medium uppercase">{l.tickettype}</span>
+                    <span className="tabular-nums">
+                      {l.quantity} × {inr(l.ticketprice)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 space-y-3 border-t border-line pt-4 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="font-display font-medium uppercase">Tickets subtotal</span>
+                  <span className="tabular-nums">{inr(subtotal)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="font-display font-medium uppercase text-muted">
+                    Booking fee
+                    <span className="ml-1 normal-case">({feePercent}% + GST)</span>
+                  </span>
+                  <span className="tabular-nums">{inr(bookingFee)}</span>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-between gap-4 rounded-md border border-line bg-surface px-4 py-3">
+                <span className="font-display font-semibold uppercase">Total amount</span>
+                <span className="h-display text-lg tabular-nums">{inr(total)}</span>
+              </div>
+            </div>
+
+            {/* T&C */}
+            <TransitionLink
+              href="/legal/terms"
+              className="mt-4 block rounded-md border border-line p-4 text-xs font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
+            >
+              Terms and conditions
+            </TransitionLink>
+
+            {error && <p className="mt-4 text-sm text-primary">{error}</p>}
+
+            {/* actions */}
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={paying}
+                className="rounded-full border border-cream/60 py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors hover:bg-cream hover:text-coal disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={pay}
+                disabled={paying}
+                className="rounded-full bg-cream py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-coal transition-colors hover:bg-primary hover:text-cream disabled:opacity-60"
+              >
+                {paying ? "Opening…" : "Yes, continue →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

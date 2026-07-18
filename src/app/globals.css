@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@theme {
+  /* 2BHK palette — primary red matched to the 2BHK logo */
+  --color-coal: #0d0d0d;
+  --color-surface: #151515;
+  --color-elevated: #1d1d1d;
+  --color-primary: #e10600;
+  --color-cream: #f5f5f0;
+  --color-muted: #8d8d87;
+  --color-gold: #c9a227;
+  --color-line: rgba(245, 245, 240, 0.12);
+
+  --font-display: var(--font-clash), system-ui, sans-serif;
+  --font-sans: var(--font-general), system-ui, sans-serif;
+  --font-serif: var(--font-instrument), Georgia, serif;
+
+  --animate-marquee: marquee 30s linear infinite;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+}
+
+html {
+  scroll-behavior: initial; /* Lenis owns scrolling */
+  color-scheme: dark; /* native form controls (date picker etc.) render for dark UI */
+}
+
+/* make the native date-picker icon visible and clickable on the dark theme */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.7;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+body {
+  background: var(--color-coal);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: var(--color-cream);
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-coal);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+}
+
+/* micro uppercase label used across sections */
+.label {
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.h-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+
+/* grain overlay for posters / hero */
+.noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+}
+
+/* hide scrollbars on horizontal strips but keep them scrollable */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
