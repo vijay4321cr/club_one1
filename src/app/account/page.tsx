@@ -1,17 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Button from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
-import TicketModal, { passQrs } from "@/components/account/TicketModal";
-import { authFetch, logout, ApiError } from "@/lib/auth";
-import { sendFeedback, getTicketDetails } from "@/lib/api";
+import TicketModal from "@/components/account/TicketModal";
+import TicketCard from "@/components/account/TicketCard";
+import { logout, ApiError } from "@/lib/auth";
+import { sendFeedback, getAllTicketDetails } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
-import { eventDate } from "@/lib/format";
-import type { RizztixUserTicket, RizztixTicketDetail } from "@/types";
+import type { RizztixTicketDetail } from "@/types";
 
 type Tab = "tickets" | "profile" | "feedback";
+
+/** display "+91 XXXXXXXXXX" without doubling a country code the API included */
+function displayPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+  return `+91 ${digits}`;
+}
+
+function displayDob(dob?: string) {
+  if (!dob) return "—";
+  const d = new Date(dob);
+  return isNaN(+d)
+    ? dob
+    : d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+}
 
 export default function AccountPage() {
   const { session, user, loading } = useAuth();
@@ -27,32 +40,8 @@ export default function AccountPage() {
     let cancelled = false;
     (async () => {
       try {
-        // 1. list the user's ticket ids
-        const data = await authFetch<unknown>("/order/userTickets?page=1");
-        const d = data as {
-          data?: RizztixUserTicket[];
-          tickets?: RizztixUserTicket[];
-          orders?: RizztixUserTicket[];
-        };
-        const list = Array.isArray(data)
-          ? (data as RizztixUserTicket[])
-          : d.data ?? d.tickets ?? d.orders ?? [];
-
-        // 2. load full details (event info + per-pass QRs) per ticket id.
-        //    one call returns the whole order bundle — dedupe by _id and
-        //    skip ids already covered by a previous bundle.
-        const details = new Map<string, RizztixTicketDetail>();
-        for (const item of list) {
-          if (!item._id || details.has(item._id)) continue;
-          try {
-            for (const t of await getTicketDetails(item._id)) {
-              if (t._id) details.set(t._id, t);
-            }
-          } catch {
-            /* one broken ticket shouldn't hide the rest */
-          }
-        }
-        if (!cancelled) setTickets([...details.values()]);
+        const all = await getAllTicketDetails();
+        if (!cancelled) setTickets(all);
       } catch (e) {
         if (!cancelled) {
           setTickets([]);
@@ -142,60 +131,9 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {tickets.map((t) => {
-                const ev = t.eventDetails;
-                const qrCount = passQrs(t).length;
-                return (
-                  <div
-                    key={t._id}
-                    className="flex flex-col gap-5 rounded-sm border border-line p-5 transition-colors hover:border-cream/30 sm:flex-row sm:items-center"
-                  >
-                    {ev?.image && (
-                      <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-sm bg-surface sm:aspect-square sm:w-24">
-                        <Image
-                          src={ev.image}
-                          alt={`${ev.title ?? "Event"} poster`}
-                          fill
-                          sizes="96px"
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <p className="label !text-[0.5625rem]">
-                        {ev?.startdatetime ? `${eventDate(ev.startdatetime)} · ` : ""}
-                        {t.bookingref ?? ""}
-                        {t.orderstatus ? (
-                          <span className="text-primary"> · {t.orderstatus}</span>
-                        ) : null}
-                      </p>
-                      <p className="mt-1 font-display text-lg font-medium uppercase leading-tight">
-                        {ev?.title ?? "2BHK event"}
-                      </p>
-                      {/* highlighted category + count */}
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-primary/50 bg-primary/15 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-primary">
-                          {t.tickettype ?? "Ticket"}
-                        </span>
-                        <span className="rounded-full border border-line px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em]">
-                          × {t.noofticket ?? 1}
-                        </span>
-                        {(t.passesPerUnit ?? 1) > 1 && (
-                          <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em] text-gold">
-                            Admits {t.passesPerUnit}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setOpenTicket(t)}
-                      className="shrink-0 self-start rounded-full bg-primary px-6 py-3 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal sm:self-center"
-                    >
-                      View QR{qrCount > 1 ? `s (${qrCount})` : ""}
-                    </button>
-                  </div>
-                );
-              })}
+              {tickets.map((t) => (
+                <TicketCard key={t._id} ticket={t} onView={setOpenTicket} />
+              ))}
             </div>
           )}
         </div>
@@ -258,11 +196,15 @@ export default function AccountPage() {
           </div>
           <div>
             <p className="label mb-1">Mobile</p>
-            <p className="border-b border-line py-3">+91 {user.phone}</p>
+            <p className="border-b border-line py-3">{displayPhone(user.phone)}</p>
           </div>
           <div>
             <p className="label mb-1">Email</p>
             <p className="border-b border-line py-3">{user.email}</p>
+          </div>
+          <div>
+            <p className="label mb-1">Date of birth</p>
+            <p className="border-b border-line py-3">{displayDob(user.dob)}</p>
           </div>
           <p className="text-xs text-muted">
             Details are tied to your booking account. To change them, contact us.

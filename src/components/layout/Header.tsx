@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import TransitionLink from "@/components/ui/TransitionLink";
 import FullscreenMenu from "@/components/layout/FullscreenMenu";
-import type { RizztixEvent } from "@/types";
 
-export default function Header({ nextEvent }: { nextEvent?: RizztixEvent }) {
+export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -69,7 +68,7 @@ export default function Header({ nextEvent }: { nextEvent?: RizztixEvent }) {
         </div>
       </header>
 
-      <FullscreenMenu open={menuOpen} onClose={() => setMenuOpen(false)} nextEvent={nextEvent} />
+      <FullscreenMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </>
   );
 }

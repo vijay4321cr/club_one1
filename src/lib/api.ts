@@ -162,3 +162,33 @@ export async function getTicketDetails(ticketDocId: string): Promise<RizztixTick
   );
   return Array.isArray(data) ? data : [];
 }
+
+/**
+ * All of the logged-in user's tickets, fully detailed.
+ * userTickets lists ids → viewTicketsWithTicketId per id (each call returns
+ * the whole order bundle, so results are deduped and covered ids skipped).
+ */
+export async function getAllTicketDetails(): Promise<RizztixTicketDetail[]> {
+  const data = await authFetch<unknown>("/order/userTickets?page=1");
+  const d = data as {
+    data?: { _id?: string }[];
+    tickets?: { _id?: string }[];
+    orders?: { _id?: string }[];
+  };
+  const list = Array.isArray(data)
+    ? (data as { _id?: string }[])
+    : d.data ?? d.tickets ?? d.orders ?? [];
+
+  const details = new Map<string, RizztixTicketDetail>();
+  for (const item of list) {
+    if (!item._id || details.has(item._id)) continue;
+    try {
+      for (const t of await getTicketDetails(item._id)) {
+        if (t._id) details.set(t._id, t);
+      }
+    } catch {
+      /* one broken ticket shouldn't hide the rest */
+    }
+  }
+  return [...details.values()];
+}

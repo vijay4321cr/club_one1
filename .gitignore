@@ -25,6 +25,10 @@
 .DS_Store
 *.pem
 
+# AI agent docs — local only, never committed or deployed
+AGENTS.md
+CONTEXT.md
+
 # debug
 npm-debug.log*
 yarn-debug.log*

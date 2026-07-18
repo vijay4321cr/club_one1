@@ -98,21 +98,20 @@ export const faqs: Faq[] = [
 
 export const club = {
   name: "2BHK",
+  fullName: "2BHK Diner & Key Club",
   tagline: "Bar ‹Hauté› Kitchen",
   motto: "Drink. Dine. Dance. Dazzle.",
   legalName: "Myrah Hospitality LLP",
   gstin: "27ABKFM0665L1ZU",
-  address: "Pune, Maharashtra", // full street address pending from client
+  address:
+    "Unit 7, Raja Bahadur Mills, behind Sheraton Grand, Bund Garden Road, Sangamvadi, Pune, Maharashtra 411001",
   phone: "+91 77450 42999 · +91 77450 52999", // Infohauteline
-  email: "info@2bhk.in", // placeholder — confirm with client
-  hours: "Wed–Sun · 8 PM – 3 AM",
-  socials: [
-    { name: "Instagram", href: "https://instagram.com" },
-    { name: "Facebook", href: "https://facebook.com" },
-    { name: "X", href: "https://x.com" },
-    { name: "YouTube", href: "https://youtube.com" },
-    { name: "Spotify", href: "https://spotify.com" },
-  ],
+  // email: "info@2bhk.in", — club has no public email yet; uncomment when client provides one
+  hours: "Open daily · 12:30 PM – 1:30 AM",
+  clubNights: "Club nights · Wed–Sun · 8 PM – 3 AM",
+  /* exact venue coordinates (also sent by the Rizztix backend in event latlong) */
+  geo: { lat: 18.5325927, lng: 73.8709205 },
+  socials: [{ name: "Instagram", href: "https://www.instagram.com/2bhkdinerkeyclub/" }],
   mapsEmbed:
-    "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3507.106!2d77.099!3d28.467!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjjCsDI4JzAxLjIiTiA3N8KwMDUnNTYuNCJF!5e0!3m2!1sen!2sin!4v1700000000000",
+    "https://www.google.com/maps?q=18.5325927,73.8709205+(2BHK+Diner+%26+Key+Club)&z=17&output=embed",
 };

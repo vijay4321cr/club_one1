@@ -103,6 +103,7 @@ export interface RizztixUser {
   phone: string;
   fullname: string;
   email: string;
+  dob?: string;
   role: string;
   isonboarded?: boolean;
 }

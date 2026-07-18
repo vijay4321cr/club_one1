@@ -161,17 +161,17 @@ function LoginFlow() {
           <Input
             label="One-time code"
             inputMode="numeric"
-            maxLength={6}
+            maxLength={4}
             required
             autoFocus
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            placeholder="6-digit code"
+            placeholder="4-digit code"
           />
           {devOtp && (
             <p className="text-xs text-gold">Staging OTP: {devOtp}</p>
           )}
-          <Button type="submit" full disabled={busy || otp.length < 4}>
+          <Button type="submit" full disabled={busy || otp.length !== 4}>
             {busy ? "Verifying…" : "Verify & sign in"}
           </Button>
           <div className="flex items-center justify-between">

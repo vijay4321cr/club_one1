@@ -1,18 +1,13 @@
 # ------------------------------------------------------------------
-# 2BHK website — Apache configuration
+# 2BHK website — Apache configuration (STATIC EXPORT)
 #
-# This app is a Next.js SERVER app (dynamic event pages + 60s ISR),
-# so it must run as a Node process:  npm run build && npm run start
-# Apache's job is only to sit in front and proxy traffic to it.
-#
-# cPanel note: if your host has "Setup Node.js App" (Passenger),
-# use that instead of the proxy block below — Passenger wires the
-# proxying itself and this file then only needs the HTTPS/security
-# sections.
+# The site is built with `npm run build` into dist/ as plain static
+# files (dist/index.html etc.). Upload the CONTENTS of dist/ plus this
+# .htaccess file to the web root. No Node server needed — all live data
+# is fetched by the browser from the Rizztix API.
 # ------------------------------------------------------------------
 
 Options -Indexes
-DirectorySlash Off
 
 RewriteEngine On
 
@@ -24,11 +19,21 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
 RewriteRule ^ https://%1%{REQUEST_URI} [L,R=301]
 
-# ---- reverse proxy to the Next.js server ----
-# Requires mod_proxy + mod_proxy_http. Adjust the port if the Node
-# process runs elsewhere (default: npm start on 3000).
-RewriteCond %{REQUEST_URI} !^/\.well-known/
-RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
+# ---- legacy event links: /event/{id} -> /event/view?id={id} ----
+RewriteCond %{REQUEST_URI} !^/event/view
+RewriteRule ^event/([A-Za-z0-9]+)/?$ /event/view.html?id=$1 [L,QSA]
+
+# ---- SMS short ticket links: /t/{bookingRef} -> /t?{bookingRef} ----
+# (the query form /t/?REF is served natively by the extensionless rule below)
+RewriteRule ^t/([A-Za-z0-9]+)/?$ /t.html?$1 [L]
+
+# ---- serve Next's exported .html files for extensionless URLs ----
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{DOCUMENT_ROOT}/$1.html -f
+RewriteRule ^(.*?)/?$ $1.html [L]
+
+ErrorDocument 404 /404.html
 
 # ---- security headers ----
 <IfModule mod_headers.c>
@@ -43,7 +48,7 @@ RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
   AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript application/json image/svg+xml
 </IfModule>
 
-# ---- long-lived caching for hashed static assets ----
+# ---- long-lived caching for static assets ----
 <IfModule mod_expires.c>
   ExpiresActive On
   ExpiresByType image/jpeg "access plus 30 days"
@@ -51,4 +56,6 @@ RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
   ExpiresByType image/webp "access plus 30 days"
   ExpiresByType video/mp4 "access plus 30 days"
   ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType text/css "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
 </IfModule>

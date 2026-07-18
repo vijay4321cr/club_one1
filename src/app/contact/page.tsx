@@ -122,15 +122,15 @@ export default function ContactPage() {
             </div>
             <div>
               <p className="label mb-2">Hours</p>
-              <p className="text-sm text-cream/85">{club.hours}</p>
+              <p className="text-sm text-cream/85">
+                {club.hours}
+                <br />
+                {club.clubNights}
+              </p>
             </div>
             <div>
               <p className="label mb-2">Reach us</p>
-              <p className="text-sm text-cream/85">
-                {club.phone}
-                <br />
-                {club.email}
-              </p>
+              <p className="text-sm text-cream/85">{club.phone}</p>
             </div>
             <div className="overflow-hidden rounded-sm border border-line">
               <iframe

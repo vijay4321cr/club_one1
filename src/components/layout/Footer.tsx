@@ -142,9 +142,7 @@ export default function Footer() {
             © {new Date().getFullYear()} {club.name} — {club.tagline} · {club.legalName} · GSTIN{" "}
             {club.gstin}. Drink responsibly — 21+ only.
           </p>
-          <p>
-            {club.phone} · {club.email}
-          </p>
+          <p>{club.phone}</p>
         </div>
       </div>
     </footer>

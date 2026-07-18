@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
@@ -36,9 +35,27 @@ function loadRazorpay(): Promise<boolean> {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Ticket descriptions arrive semicolon-separated and sometimes repeated
+ * ("Only Entry.;No cover amount.;ONLY ENTRY") — split, trim and dedupe
+ * case-insensitively into clean " · " separated points.
+ */
+function ticketDesc(raw: string): string {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const piece of raw.split(";")) {
+    const clean = piece.trim().replace(/[.\s]+$/, "");
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(clean);
+  }
+  return parts.join(" · ");
+}
+
 interface Success {
   bookingref: string;
-  qrcodeimage?: string;
   amount: number;
   lines: RizztixTicketLine[];
 }
@@ -49,7 +66,9 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
   const { session } = useAuth();
   const [qty, setQty] = useState<Record<string, number>>({});
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showFeeBreakdown, setShowFeeBreakdown] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<Success | null>(null);
 
@@ -87,7 +106,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
 
   const pay = async () => {
     if (!session) {
-      router.push(`/login?next=/event/${event._id}`);
+      router.push(`/login?next=${encodeURIComponent(`/event/view?id=${event._id}`)}`);
       return;
     }
     if (lines.length === 0 || paying) return;
@@ -156,6 +175,10 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
         if (result.error) {
           setError(result.error.message ?? "Payment was not completed.");
         } else {
+          // close the summary modal immediately — verification gets its own
+          // full-screen state instead of a lingering "Opening…" popup
+          setShowConfirm(false);
+          setConfirming(true);
           // MANDATORY: backend verifies the payment with Cashfree and issues
           // the ticket — only after this succeeds do we show "confirmed"
           try {
@@ -167,17 +190,17 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
             });
             setSuccess({
               bookingref: confirmed.bookingref ?? order.bookingref,
-              qrcodeimage: confirmed.qrcodeimage,
               amount: total,
               lines,
             });
-            setShowConfirm(false);
           } catch (e) {
             setError(
               e instanceof ApiError
                 ? `Payment confirmation failed: ${e.message}. Your booking ref is ${order.bookingref} — if you were charged, check My Account or contact us.`
                 : `Payment confirmation failed — your booking ref is ${order.bookingref}. If you were charged, check My Account or contact us.`
             );
+          } finally {
+            setConfirming(false);
           }
         }
         setPaying(false);
@@ -207,6 +230,8 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
             razorpay_payment_id: string;
             razorpay_signature: string;
           }) => {
+            setShowConfirm(false);
+            setConfirming(true);
             try {
               const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
                 body: {
@@ -218,11 +243,9 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               });
               setSuccess({
                 bookingref: confirmed.bookingref ?? order.bookingref,
-                qrcodeimage: confirmed.qrcodeimage,
                 amount: total,
                 lines,
               });
-              setShowConfirm(false);
             } catch (e) {
               setError(
                 e instanceof ApiError
@@ -230,6 +253,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                   : "Payment confirmation failed — check My Account or contact us."
               );
             } finally {
+              setConfirming(false);
               setPaying(false);
             }
           },
@@ -241,13 +265,29 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        router.push(`/login?next=/event/${event._id}`);
+        router.push(`/login?next=${encodeURIComponent(`/event/view?id=${event._id}`)}`);
       } else {
         setError(e instanceof ApiError ? e.message : "Could not start the booking — try again.");
       }
       setPaying(false);
     }
   };
+
+  /* ---------------- verifying payment ---------------- */
+  if (confirming) {
+    return (
+      <div className="rounded-sm border border-line p-8 text-center md:p-12">
+        <p className="label mb-3 flex items-center justify-center gap-2 !text-primary">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+          Payment received
+        </p>
+        <h3 className="h-display text-3xl md:text-4xl">Confirming your booking…</h3>
+        <p className="mt-3 text-sm text-muted">
+          Hold on a second — issuing your tickets. Don&apos;t close this page.
+        </p>
+      </div>
+    );
+  }
 
   /* ---------------- success panel ---------------- */
   if (success) {
@@ -260,20 +300,9 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
             {success.lines.map((l) => `${l.tickettype} × ${l.quantity}`).join(" · ")} ·{" "}
             {inr(success.amount)} · Ref <span className="text-cream">{success.bookingref}</span>
           </p>
-          {success.qrcodeimage && (
-            <div className="relative mx-auto mt-8 h-44 w-44 overflow-hidden rounded-sm bg-cream p-2">
-              <Image
-                src={success.qrcodeimage}
-                alt="Entry QR code"
-                fill
-                sizes="176px"
-                className="object-contain"
-              />
-            </div>
-          )}
-          <p className="label mt-4">Show this at the door — also saved in My Account</p>
+          <p className="label mt-6">Your tickets &amp; entry QR codes are in My Account</p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <Button href="/account">My bookings</Button>
+            <Button href="/account">View my tickets</Button>
             <Button href="/#events" variant="outline">
               More events
             </Button>
@@ -309,7 +338,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                     {t.tickettype}
                   </h3>
                   <p className="mt-1 text-sm text-muted">
-                    {t.categorydesc}
+                    {ticketDesc(t.categorydesc)}
                     {t.passesPerUnit > 1 && ` · admits ${t.passesPerUnit}`}
                     {t.coverAmount > 0 && ` · ${inr(t.coverAmount)} cover included`}
                   </p>
@@ -435,12 +464,46 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                   <span className="font-display font-medium uppercase">Tickets subtotal</span>
                   <span className="tabular-nums">{inr(subtotal)}</span>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <span className="font-display font-medium uppercase text-muted">
+                {/* booking fee with expandable CGST/SGST breakdown */}
+                <button
+                  type="button"
+                  onClick={() => setShowFeeBreakdown((v) => !v)}
+                  className="flex w-full items-center justify-between gap-4"
+                  aria-expanded={showFeeBreakdown}
+                >
+                  <span className="flex items-center gap-1.5 font-display font-medium uppercase text-muted">
                     Booking fee
-                    <span className="ml-1 normal-case">({feePercent}% + GST)</span>
+                    <span
+                      className={`inline-block text-xs transition-transform duration-300 ${
+                        showFeeBreakdown ? "rotate-180" : ""
+                      }`}
+                    >
+                      ▾
+                    </span>
                   </span>
                   <span className="tabular-nums">{inr(bookingFee)}</span>
+                </button>
+                <div
+                  className={`grid transition-all duration-300 ${
+                    showFeeBreakdown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-2 pl-3 text-xs text-muted">
+                      <div className="flex justify-between gap-4">
+                        <span>Base fee ({feePercent}%)</span>
+                        <span className="tabular-nums">{inr(baseprice)}</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span>CGST (9%)</span>
+                        <span className="tabular-nums">{inr(round2(baseprice * 0.09))}</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span>SGST (9%)</span>
+                        <span className="tabular-nums">{inr(round2(baseprice * 0.09))}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="mt-4 flex justify-between gap-4 rounded-md border border-line bg-surface px-4 py-3">

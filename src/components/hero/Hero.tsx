@@ -110,7 +110,7 @@ export default function Hero({ nextEvent }: { nextEvent?: RizztixEvent }) {
             ))}
           <div className="hero-fade flex flex-col gap-3 sm:flex-row" style={{ visibility: "hidden" }}>
             <Button
-              href={nextEvent ? `/event/${nextEvent._id}` : "/#events"}
+              href={nextEvent ? `/event/view?id=${nextEvent._id}` : "/#events"}
               variant="primary"
             >
               Buy Tickets

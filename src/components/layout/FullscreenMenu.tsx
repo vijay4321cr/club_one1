@@ -6,7 +6,7 @@ import gsap from "gsap";
 import TransitionLink from "@/components/ui/TransitionLink";
 import { club } from "@/lib/data/content";
 import { eventDate } from "@/lib/format";
-import type { RizztixEvent } from "@/types";
+import { useUpcomingEvents } from "@/lib/useUpcoming";
 
 const links = [
   { n: "01", label: "Home", href: "/" },
@@ -25,14 +25,13 @@ const legal = [
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** real next event from the Rizztix API, passed down from the layout */
-  nextEvent?: RizztixEvent;
 }
 
 /** Fullscreen overlay nav — clip-path curtain + staggered oversized links. */
-export default function FullscreenMenu({ open, onClose, nextEvent }: Props) {
+export default function FullscreenMenu({ open, onClose }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(false);
+  const nextEvent = useUpcomingEvents()?.events[0];
 
   useEffect(() => {
     const root = rootRef.current;
@@ -152,7 +151,7 @@ export default function FullscreenMenu({ open, onClose, nextEvent }: Props) {
         <div className="mt-10 flex flex-col gap-8 md:mt-0 md:w-72 lg:w-80">
           {nextEvent && (
             <TransitionLink
-              href={`/event/${nextEvent._id}`}
+              href={`/event/view?id=${nextEvent._id}`}
               onNavigate={onClose}
               className="menu-meta group block"
             >

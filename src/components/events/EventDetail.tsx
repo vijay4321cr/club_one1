@@ -1,37 +1,45 @@
+"use client";
+
+import { useEffect } from "react";
 import Image from "next/image";
-import type { Metadata } from "next";
+import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import FxReveal from "@/components/ui/FxReveal";
-import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import TicketPurchase from "@/components/events/TicketPurchase";
-import RizztixEventCard from "@/components/events/RizztixEventCard";
-import { getRizztixEvent, getRizztixUpcomingEvents } from "@/lib/api";
+import UpcomingGrid from "@/components/events/UpcomingGrid";
+import { useUpcomingEvents } from "@/lib/useUpcoming";
 import { eventDateLong } from "@/lib/format";
 
-export const revalidate = 60;
+/** Event detail, client-fetched — works on fully static hosting. */
+export default function EventDetail() {
+  const params = useSearchParams();
+  const id = params.get("id") ?? "";
+  const data = useUpcomingEvents();
+  const event = data?.events.find((e) => e._id === id);
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}): Promise<Metadata> {
-  const { id } = await params;
-  const event = await getRizztixEvent(id);
-  return { title: event ? event.title : "Events" };
-}
+  useEffect(() => {
+    if (event) document.title = `${event.title} — 2BHK`;
+  }, [event]);
 
-export default async function RizztixEventPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const event = await getRizztixEvent(id);
+  /* loading */
+  if (data === null) {
+    return (
+      <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
+        <div className="grid animate-pulse gap-8 md:grid-cols-2 md:items-end">
+          <div>
+            <div className="h-4 w-40 rounded-sm bg-surface" />
+            <div className="mt-4 h-14 w-3/4 rounded-sm bg-surface" />
+            <div className="mt-4 h-5 w-1/2 rounded-sm bg-surface" />
+          </div>
+          <div className="aspect-[4/5] w-full rounded-sm bg-surface md:aspect-[4/3]" />
+        </div>
+      </div>
+    );
+  }
 
-  /* event ended / wrong link / API hiccup → show what's on instead of a 404 */
+  /* ended / bad link → show what's on now */
   if (!event) {
-    const { events } = await getRizztixUpcomingEvents();
     return (
       <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
         <Reveal>
@@ -44,24 +52,9 @@ export default async function RizztixEventPage({
             now.
           </p>
         </Reveal>
-        {events.length > 0 ? (
-          <div className="mt-12 grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-            {events.map((e, i) => (
-              <FxReveal key={e._id} effect="tilt" delay={(i % 3) * 0.08}>
-                <RizztixEventCard event={e} />
-              </FxReveal>
-            ))}
-          </div>
-        ) : (
-          <Reveal className="mt-12">
-            <div className="rounded-sm border border-line p-10 text-center">
-              <p className="h-display text-2xl">New nights announced soon.</p>
-              <div className="mt-6 flex justify-center">
-                <Button href="/">Back to home</Button>
-              </div>
-            </div>
-          </Reveal>
-        )}
+        <div className="mt-12">
+          <UpcomingGrid />
+        </div>
       </div>
     );
   }
@@ -93,10 +86,7 @@ export default async function RizztixEventPage({
               {eventDateLong(event.startdatetime)} — {eventDateLong(event.enddatetime)}
             </p>
           </div>
-          <FxReveal
-            effect="burn"
-            className="overflow-hidden rounded-sm"
-          >
+          <FxReveal effect="burn" className="overflow-hidden rounded-sm">
             <div className="relative aspect-[4/5] w-full bg-surface md:aspect-[4/3]">
               <Image
                 src={event.image}

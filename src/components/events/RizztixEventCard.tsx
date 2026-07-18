@@ -14,7 +14,7 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
   return (
     <article className="group flex flex-col">
       <TransitionLink
-        href={`/event/${event._id}`}
+        href={`/event/view?id=${event._id}`}
         className="relative block overflow-hidden rounded-sm"
         aria-label={event.title}
       >
@@ -42,7 +42,7 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
       </TransitionLink>
 
       <div className="flex flex-1 flex-col pt-4">
-        <TransitionLink href={`/event/${event._id}`}>
+        <TransitionLink href={`/event/view?id=${event._id}`}>
           <h3 className="font-display text-xl font-medium uppercase leading-tight transition-colors group-hover:text-primary md:text-2xl">
             {event.title}
           </h3>
@@ -56,7 +56,7 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
         )}
 
         <TransitionLink
-          href={`/event/${event._id}`}
+          href={`/event/view?id=${event._id}`}
           className="mt-4 rounded-full bg-primary py-2.5 text-center text-[0.6875rem] font-medium uppercase tracking-[0.16em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
         >
           Tickets & Info
