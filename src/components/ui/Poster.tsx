@@ -6,6 +6,8 @@ interface Props {
   /** real artwork path under /public — falls back to generated placeholder */
   src?: string;
   alt?: string;
+  /** eager-load (set on above-the-fold/LCP candidates) */
+  priority?: boolean;
   className?: string;
 }
 
@@ -13,7 +15,14 @@ interface Props {
  * Event artwork. Renders the real poster when `src` is provided, otherwise a
  * deterministic gradient + grain + cropped-initials placeholder.
  */
-export default function Poster({ hue, initials, src, alt = "", className = "" }: Props) {
+export default function Poster({
+  hue,
+  initials,
+  src,
+  alt = "",
+  priority = false,
+  className = "",
+}: Props) {
   if (src) {
     return (
       <div className={`noise relative overflow-hidden bg-surface ${className}`}>
@@ -21,6 +30,7 @@ export default function Poster({ hue, initials, src, alt = "", className = "" }:
           src={src}
           alt={alt}
           fill
+          priority={priority}
           sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
           className="object-cover object-top"
         />

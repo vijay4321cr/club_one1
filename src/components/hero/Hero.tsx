@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Button from "@/components/ui/Button";
 import Countdown from "@/components/hero/Countdown";
 import type { RizztixEvent } from "@/types";
@@ -22,6 +23,8 @@ export default function Hero({ nextEvent }: { nextEvent?: RizztixEvent }) {
   useEffect(() => {
     const root = rootRef.current;
     if (!root || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // register here too — this effect can run before LenisProvider's
+    gsap.registerPlugin(ScrollTrigger);
     const ctx = gsap.context(() => {
       const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
       tl.fromTo(

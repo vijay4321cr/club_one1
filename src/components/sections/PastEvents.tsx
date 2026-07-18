@@ -27,6 +27,7 @@ export default function PastEvents({ events }: { events: ClubEvent[] }) {
                   initials={e.poster.initials}
                   src={e.poster.image}
                   alt={`${e.title} poster`}
+                  priority={i < 4}
                   className="aspect-[3/4] w-full transition-transform duration-700 group-hover:scale-[1.04]"
                 />
               </div>

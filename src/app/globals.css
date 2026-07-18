@@ -101,6 +101,11 @@ body {
   display: none;
 }
 
+/* 3D gallery: horizontal drag spins the ring, vertical touch still scrolls */
+.gallery3d canvas {
+  touch-action: pan-y;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
