@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import gsap from "gsap";
 import Button from "@/components/ui/Button";
 import Countdown from "@/components/hero/Countdown";
@@ -80,18 +81,20 @@ export default function Hero({ nextEvent }: { nextEvent?: RizztixEvent }) {
           Drink. Dine. Dance. Dazzle.
         </p>
 
-        <h1 className="h-display text-[24vw] leading-[0.9] sm:text-[18vw] md:text-[13rem]">
-          <span className="block overflow-hidden">
-            <span className="hero-logo-line block">
-              <span className="text-primary">2</span>BHK
-            </span>
-          </span>
-          <span className="block overflow-hidden">
-            <span className="hero-logo-line block font-serif text-[0.3em] normal-case italic tracking-normal text-cream/85">
-              bar ‹ hauté › kitchen
-            </span>
-          </span>
-        </h1>
+        {/* real logo artwork replaces the text wordmark (h1 kept for SEO/a11y) */}
+        <h1 className="sr-only">2BHK — Bar Hauté Kitchen</h1>
+        <div className="overflow-hidden">
+          <div className="hero-logo-line">
+            <Image
+              src="/logo.png"
+              alt=""
+              width={675}
+              height={844}
+              priority
+              className="h-auto w-48 drop-shadow-[0_8px_32px_rgba(0,0,0,0.55)] sm:w-60 md:w-80 lg:w-[22rem]"
+            />
+          </div>
+        </div>
 
         <div className="mt-10 flex flex-col gap-8 md:mt-14 md:flex-row md:items-end md:justify-between">
           {nextEvent &&

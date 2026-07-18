@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import TransitionLink from "@/components/ui/TransitionLink";
 import FullscreenMenu from "@/components/layout/FullscreenMenu";
 
@@ -38,21 +37,6 @@ export default function Header() {
             </span>
             <span className="label hidden !text-cream sm:block">Menu</span>
           </button>
-
-          <TransitionLink
-            href="/"
-            aria-label="2BHK — home"
-            className="absolute left-1/2 -translate-x-1/2"
-          >
-            <Image
-              src="/logo.png"
-              alt="2BHK — Bar Hauté Kitchen"
-              width={44}
-              height={55}
-              priority
-              className="h-11 w-auto md:h-12"
-            />
-          </TransitionLink>
 
           <div className="flex items-center gap-3">
             <TransitionLink href="/account" className="label hidden !text-cream transition-colors hover:!text-primary md:block">
