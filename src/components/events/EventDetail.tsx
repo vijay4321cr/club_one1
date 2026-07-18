@@ -7,6 +7,7 @@ import Reveal from "@/components/ui/Reveal";
 import FxReveal from "@/components/ui/FxReveal";
 import TransitionLink from "@/components/ui/TransitionLink";
 import TicketPurchase from "@/components/events/TicketPurchase";
+import ArtistBadge from "@/components/events/ArtistBadge";
 import UpcomingGrid from "@/components/events/UpcomingGrid";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
 import { eventDateLong } from "@/lib/format";
@@ -109,21 +110,7 @@ export default function EventDetail() {
           </FxReveal>
           <div className="no-scrollbar -mx-5 flex snap-x gap-6 overflow-x-auto px-5 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
             {event.artistsDetails.map((a, i) => (
-              <FxReveal
-                key={a._id}
-                effect="tilt"
-                delay={i * 0.08}
-                className="w-28 shrink-0 snap-start text-center md:w-32"
-              >
-                <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-full bg-surface">
-                  {a.image && (
-                    <Image src={a.image} alt={a.name} fill sizes="128px" className="object-cover" />
-                  )}
-                </div>
-                <p className="mt-3 font-display text-sm font-medium uppercase leading-tight">
-                  {a.name}
-                </p>
-              </FxReveal>
+              <ArtistBadge key={a._id} artist={a} index={i} />
             ))}
           </div>
         </div>
