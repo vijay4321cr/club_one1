@@ -161,6 +161,8 @@ export interface RizztixPassQr {
   ticketId: string;
   qrcodeimage?: string;
   qrstring?: string;
+  /** raw base64 PNG (no data: prefix) some responses carry */
+  qrcode?: string;
 }
 
 /** GET /order/viewTicketsWithTicketId/{id} item — one ticket unit of a bundle */
@@ -184,6 +186,8 @@ export interface RizztixTicketDetail {
   bundlepaymenttotal?: number;
   qrcodeimage?: string;
   qrcodeimages?: string[];
+  qrstring?: string;
+  qrcode?: string;
   passQrcodes?: RizztixPassQr[];
   eventDetails?: {
     _id: string;

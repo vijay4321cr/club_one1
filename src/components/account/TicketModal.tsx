@@ -1,24 +1,45 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import gsap from "gsap";
-import StyledQr from "@/components/account/StyledQr";
+import TicketQr from "@/components/account/TicketQr";
 import { inr, eventDateLong } from "@/lib/format";
 import type { RizztixTicketDetail, RizztixPassQr } from "@/types";
 
-/** every pass QR of a ticket unit (Couple Entry = 2 passes = 2 QRs) */
+/**
+ * Every pass QR of a ticket unit (Couple Entry = 2 passes = 2 QRs).
+ * Always surfaces `qrstring` wherever it lives (pass-level or ticket-level) so
+ * the QR can be generated on-device instead of loading a remote image link.
+ */
 export function passQrs(t: RizztixTicketDetail): RizztixPassQr[] {
-  if (t.passQrcodes?.length) return t.passQrcodes;
+  if (t.passQrcodes?.length) {
+    return t.passQrcodes.map((q, i) => ({
+      passIndex: q.passIndex ?? i + 1,
+      ticketId: q.ticketId ?? t.ticketid ?? "",
+      qrcodeimage: q.qrcodeimage ?? t.qrcodeimage,
+      qrstring: q.qrstring ?? t.qrstring,
+      qrcode: q.qrcode ?? t.qrcode,
+    }));
+  }
   if (t.qrcodeimages?.length) {
     return t.qrcodeimages.map((url, i) => ({
       passIndex: i + 1,
       ticketId: t.ticketid ?? "",
       qrcodeimage: url,
+      qrstring: t.qrstring,
+      qrcode: t.qrcode,
     }));
   }
-  if (t.qrcodeimage) {
-    return [{ passIndex: 1, ticketId: t.ticketid ?? "", qrcodeimage: t.qrcodeimage }];
+  if (t.qrstring || t.qrcodeimage || t.qrcode) {
+    return [
+      {
+        passIndex: 1,
+        ticketId: t.ticketid ?? "",
+        qrcodeimage: t.qrcodeimage,
+        qrstring: t.qrstring,
+        qrcode: t.qrcode,
+      },
+    ];
   }
   return [];
 }
@@ -160,22 +181,15 @@ export default function TicketModal({ ticket, onClose }: Props) {
                 >
                   {/* themed ticket stub */}
                   <div className="w-64 overflow-hidden rounded-lg bg-cream text-coal shadow-lg shadow-black/40">
-                    {/* scan zone — brand-styled QR generated from qrstring */}
+                    {/* scan zone — QR generated on-device, falls back safely */}
                     <div className="p-5 pb-4">
-                      <div className="relative mx-auto h-48 w-48">
-                        {q.qrstring ? (
-                          <StyledQr data={q.qrstring} className="h-full w-full" />
-                        ) : (
-                          q.qrcodeimage && (
-                            <Image
-                              src={q.qrcodeimage}
-                              alt={`Entry QR ${q.ticketId}`}
-                              fill
-                              sizes="192px"
-                              className="object-contain"
-                            />
-                          )
-                        )}
+                      <div className="mx-auto h-48 w-48">
+                        <TicketQr
+                          qrstring={q.qrstring}
+                          qrcode={q.qrcode}
+                          qrcodeimage={q.qrcodeimage}
+                          className="h-full w-full"
+                        />
                       </div>
                     </div>
 

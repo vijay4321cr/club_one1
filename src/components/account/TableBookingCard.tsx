@@ -1,19 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import StyledQr from "@/components/account/StyledQr";
+import TicketQr from "@/components/account/TicketQr";
 import { inr, eventDate } from "@/lib/format";
 import type { TableBooking } from "@/types";
 
+interface Props {
+  booking: TableBooking;
+  /** open the QR popup on mount (deep-link from ?order=) */
+  autoOpen?: boolean;
+  /** notify the page so it can reflect the open QR in the URL */
+  onOpenChange?: (open: boolean) => void;
+}
+
 /** A table booking row with a guest-QR popup (styled ticket-stub slider). */
-export default function TableBookingCard({ booking: b }: { booking: TableBooking }) {
+export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }: Props) {
   const [open, setOpen] = useState(false);
   const [idx, setIdx] = useState(0);
   const qrs = b.guestQrcodes ?? [];
   const img = b.eventid?.image;
   const date = b.eventid?.startdatetime ?? b.serviceDate;
   const confirmed = b.status === "CONFIRMED";
+
+  const setQrOpen = (v: boolean) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
+
+  // deep-link: open on mount when asked (only if there's a QR to show)
+  useEffect(() => {
+    if (autoOpen && confirmed && qrs.length > 0) setQrOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
 
   return (
     <>
@@ -48,7 +67,7 @@ export default function TableBookingCard({ booking: b }: { booking: TableBooking
               <button
                 onClick={() => {
                   setIdx(0);
-                  setOpen(true);
+                  setQrOpen(true);
                 }}
                 className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
               >
@@ -66,7 +85,7 @@ export default function TableBookingCard({ booking: b }: { booking: TableBooking
           className="fixed inset-0 z-70 flex items-center justify-center bg-coal/85 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          onClick={() => setOpen(false)}
+          onClick={() => setQrOpen(false)}
         >
           <div
             data-lenis-prevent
@@ -76,7 +95,7 @@ export default function TableBookingCard({ booking: b }: { booking: TableBooking
             <div className="mb-4 flex items-center justify-between">
               <p className="font-display text-lg font-semibold uppercase">{b.bookingref}</p>
               <button
-                onClick={() => setOpen(false)}
+                onClick={() => setQrOpen(false)}
                 aria-label="Close"
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
               >
@@ -86,19 +105,11 @@ export default function TableBookingCard({ booking: b }: { booking: TableBooking
 
             <div className="mx-auto w-full max-w-[16rem] overflow-hidden rounded-lg bg-cream text-coal">
               <div className="p-5">
-                {qrs[idx]?.qrstring ? (
-                  <StyledQr data={qrs[idx].qrstring!} className="mx-auto h-44 w-44" />
-                ) : qrs[idx]?.qrcodeimage ? (
-                  <div className="relative mx-auto h-44 w-44">
-                    <Image
-                      src={qrs[idx].qrcodeimage!}
-                      alt="Entry QR"
-                      fill
-                      sizes="176px"
-                      className="object-contain"
-                    />
-                  </div>
-                ) : null}
+                <TicketQr
+                  qrstring={qrs[idx]?.qrstring}
+                  qrcodeimage={qrs[idx]?.qrcodeimage}
+                  className="mx-auto h-44 w-44"
+                />
               </div>
               <div className="flex items-center justify-between border-t-2 border-dashed border-coal/20 px-5 py-3">
                 <span className="text-[0.5625rem] font-semibold uppercase tracking-[0.2em] text-coal/50">

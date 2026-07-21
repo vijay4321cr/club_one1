@@ -37,6 +37,28 @@ export default function AccountPage() {
   const [feedbackState, setFeedbackState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [openTicket, setOpenTicket] = useState<RizztixTicketDetail | null>(null);
   const [tables, setTables] = useState<TableBooking[] | null>(null);
+  // deep-link: which order's QR to reveal, from ?order= (read once on mount)
+  const [orderParam, setOrderParam] = useState<string | null>(null);
+  const [autoOpened, setAutoOpened] = useState(false);
+
+  useEffect(() => {
+    setOrderParam(new URLSearchParams(window.location.search).get("order"));
+  }, []);
+
+  /** reflect the open QR in the URL without navigating (no Lenis/scroll fight) */
+  const syncUrl = (orderid: string | null) => {
+    const url = orderid ? `/account?order=${encodeURIComponent(orderid)}` : "/account";
+    window.history.replaceState(null, "", url);
+  };
+
+  const viewTicket = (t: RizztixTicketDetail) => {
+    setOpenTicket(t);
+    if (t.orderid) syncUrl(t.orderid);
+  };
+  const closeTicket = () => {
+    setOpenTicket(null);
+    syncUrl(null);
+  };
 
   useEffect(() => {
     if (!session) return;
@@ -67,6 +89,22 @@ export default function AccountPage() {
     // re-fetch only when the signed-in user changes — NOT on token refreshes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?._id]);
+
+  // once data is in, open the QR named by ?order= (tickets first, then tables)
+  useEffect(() => {
+    if (autoOpened || !orderParam || tickets === null || tables === null) return;
+    const ticket = tickets.find((t) => t.orderid === orderParam);
+    if (ticket) {
+      setTab("tickets");
+      setOpenTicket(ticket);
+      setAutoOpened(true);
+      return;
+    }
+    if (tables.some((b) => b.orderid === orderParam)) {
+      setTab("tables");
+      setAutoOpened(true);
+    }
+  }, [autoOpened, orderParam, tickets, tables]);
 
   if (loading) return <div className="min-h-svh" />;
 
@@ -143,7 +181,7 @@ export default function AccountPage() {
           ) : (
             <div className="space-y-3">
               {tickets.map((t) => (
-                <TicketCard key={t._id} ticket={t} onView={setOpenTicket} />
+                <TicketCard key={t._id} ticket={t} onView={viewTicket} />
               ))}
             </div>
           )}
@@ -164,7 +202,12 @@ export default function AccountPage() {
           ) : (
             <div className="space-y-3">
               {tables.map((b) => (
-                <TableBookingCard key={b._id} booking={b} />
+                <TableBookingCard
+                  key={b._id}
+                  booking={b}
+                  autoOpen={!!b.orderid && b.orderid === orderParam}
+                  onOpenChange={(open) => syncUrl(open ? b.orderid ?? null : null)}
+                />
               ))}
             </div>
           )}
@@ -245,7 +288,7 @@ export default function AccountPage() {
       )}
 
       {/* QR / ticket-detail popup */}
-      {openTicket && <TicketModal ticket={openTicket} onClose={() => setOpenTicket(null)} />}
+      {openTicket && <TicketModal ticket={openTicket} onClose={closeTicket} />}
     </div>
   );
 }

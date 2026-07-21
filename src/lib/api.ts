@@ -192,3 +192,40 @@ export async function getAllTicketDetails(): Promise<RizztixTicketDetail[]> {
   }
   return [...details.values()];
 }
+
+/**
+ * Guest (login-free) ticket view for SMS/email links:
+ * GET /order/viewTicketsGuest/{orderId}?token={64-hex}. Throws with the
+ * API's friendly message when the link is invalid/expired.
+ */
+export async function getGuestTickets(
+  orderId: string,
+  token: string
+): Promise<RizztixTicketDetail[]> {
+  const res = await fetch(
+    `${API_BASE_URL}/order/viewTicketsGuest/${encodeURIComponent(orderId)}?token=${encodeURIComponent(
+      token
+    )}`,
+    { headers: { Accept: "application/json" } }
+  );
+  let json: { message?: string; data?: unknown } | undefined;
+  try {
+    json = (await res.json()) as { message?: string; data?: unknown };
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok) {
+    throw new Error(json?.message ?? "This ticket link is invalid or has expired.");
+  }
+  const data = json?.data;
+  if (Array.isArray(data)) return data as RizztixTicketDetail[];
+  const d = (data ?? {}) as {
+    data?: RizztixTicketDetail[];
+    tickets?: RizztixTicketDetail[];
+    ticket?: RizztixTicketDetail;
+  };
+  if (Array.isArray(d.data)) return d.data;
+  if (Array.isArray(d.tickets)) return d.tickets;
+  if (d.ticket) return [d.ticket];
+  return [];
+}
