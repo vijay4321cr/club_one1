@@ -5,8 +5,8 @@ import type { TableLayout, TableZone, TableSpot } from "@/types";
 
 interface Props {
   layout: TableLayout;
-  selected: { zone: TableZone; table: TableSpot } | null;
-  onSelect: (zone: TableZone, table: TableSpot) => void;
+  selectedIds: string[];
+  onToggle: (zone: TableZone, table: TableSpot) => void;
 }
 
 const pinClass = (color: string) =>
@@ -19,9 +19,16 @@ const pinClass = (color: string) =>
         : "bg-gold";
 
 /** Interactive floor plan — zone overview → zoom into a zone → pick a table. */
-export default function FloorMap({ layout, selected, onSelect }: Props) {
+export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
   const [zoneId, setZoneId] = useState<string | null>(null);
   const zone = layout.areas.find((z) => z._id === zoneId) ?? null;
+  const selectedSet = new Set(selectedIds);
+  // zones that contain a selected table (for an overview indicator)
+  const zonesWithSelection = new Set(
+    layout.areas
+      .filter((z) => z.tables?.some((t) => selectedSet.has(t._id)))
+      .map((z) => z._id)
+  );
 
   // scale to frame a zone's focusBounds into the viewport (origin top-left)
   const zoomScale = (() => {
@@ -108,7 +115,9 @@ export default function FloorMap({ layout, selected, onSelect }: Props) {
             )}
 
             {spots.map((s) => {
-              const isSel = selected?.table._id === s._id;
+              const isSel = s.isZone
+                ? zonesWithSelection.has(s._id)
+                : selectedSet.has(s._id);
               const clickable = s.selectable !== false;
               return (
                 <button
@@ -118,9 +127,9 @@ export default function FloorMap({ layout, selected, onSelect }: Props) {
                     if (s.isZone && "tables" in s && (s as TableZone).tables?.length) {
                       setZoneId(s._id);
                     } else if (zone) {
-                      onSelect(zone, s);
+                      onToggle(zone, s);
                     } else {
-                      onSelect(s as TableZone, s);
+                      onToggle(s as TableZone, s);
                     }
                   }}
                   className="group absolute"

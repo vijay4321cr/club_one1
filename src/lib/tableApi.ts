@@ -65,10 +65,12 @@ export function getTableLayouts(params: {
 /** the money + selection fields the init endpoint expects (camel + snake, per HAR) */
 export interface TableInitInput {
   layoutId: string;
-  areaId: string; // selected table's _id (or zone _id when no tables)
+  areaId: string; // first selected table's _id (compat)
+  areaIds?: string[]; // all selected tables (multi-table)
+  partySizes?: number[]; // party per table, same order as areaIds
   serviceDate: string;
   slotKey: string;
-  partySize: number;
+  partySize: number; // total
   malePax: number;
   femalePax: number;
   clubId?: string;
@@ -91,6 +93,9 @@ export function initTableBooking(input: TableInitInput): Promise<TableInitResult
     body: {
       layoutId: input.layoutId,
       areaId: input.areaId,
+      ...(input.areaIds && input.areaIds.length > 1
+        ? { areaIds: input.areaIds, partySizes: input.partySizes }
+        : {}),
       serviceDate: input.serviceDate,
       slotKey: input.slotKey,
       partySize: input.partySize,

@@ -43,11 +43,13 @@ export default function TableBooking() {
   const [loadingMap, setLoadingMap] = useState(false);
   const [mapError, setMapError] = useState("");
 
-  const [selected, setSelected] = useState<{ zone: TableZone; table: TableSpot } | null>(null);
+  // one or more tables, each with its own party size
+  const [selected, setSelected] = useState<
+    { zone: TableZone; table: TableSpot; pax: number }[]
+  >([]);
   const [showModal, setShowModal] = useState(false);
   const [phase, setPhase] = useState<Phase>("map");
-  const [male, setMale] = useState(1);
-  const [female, setFemale] = useState(0);
+  const [men, setMen] = useState(0); // women = total − men
   const [error, setError] = useState("");
   const [guestQrs, setGuestQrs] = useState<TableGuestQr[] | null>(null);
   const [bookingRef, setBookingRef] = useState("");
@@ -77,7 +79,7 @@ export default function TableBooking() {
     let cancelled = false;
     setLoadingMap(true);
     setMapError("");
-    setSelected(null);
+    setSelected([]);
     (async () => {
       const slots = await getTableSlots({ serviceDate, eventId });
       const key =
@@ -105,14 +107,32 @@ export default function TableBooking() {
     };
   }, [serviceDate, eventId, event]);
 
-  const partySize = male + female;
-  const table = selected?.table;
-  const withinRange = table ? partySize >= table.minPartySize && partySize <= table.maxPartySize : false;
+  const partySize = selected.reduce((s, x) => s + x.pax, 0);
+  const menCount = Math.min(men, partySize);
+  const women = partySize - menCount;
+  const selectedIds = selected.map((x) => x.table._id);
+  // every table within its own min/max, and at least one guest
+  const allWithinRange =
+    selected.length > 0 &&
+    partySize > 0 &&
+    selected.every((x) => x.pax >= x.table.minPartySize && x.pax <= x.table.maxPartySize);
 
-  // quote (matches the real 2BHK HAR to the paisa)
+  const toggleTable = (zone: TableZone, table: TableSpot) => {
+    setSelected((prev) =>
+      prev.some((x) => x.table._id === table._id)
+        ? prev.filter((x) => x.table._id !== table._id)
+        : [...prev, { zone, table, pax: Math.max(1, table.minPartySize) }]
+    );
+  };
+  const setPax = (id: string, pax: number) =>
+    setSelected((prev) => prev.map((x) => (x.table._id === id ? { ...x, pax: Math.max(1, pax) } : x)));
+
+  // quote (matches the real 2BHK HAR; multi-table sums each table's min spend)
   const quote = useMemo(() => {
-    if (!table) return null;
-    const minimumSpend = round2(table.priceFromPerPerson * partySize);
+    if (selected.length === 0) return null;
+    const minimumSpend = round2(
+      selected.reduce((s, x) => s + x.table.priceFromPerPerson * x.pax, 0)
+    );
     const depositAmount = round2((minimumSpend * depositPercent) / 100);
     const bookingPct = event?.bookingpercentage ?? 5;
     const bookingFee = round2((minimumSpend * bookingPct) / 100);
@@ -120,16 +140,8 @@ export default function TableBooking() {
     const cgst = round2(bookingFee * 0.09);
     const baseamount = round2(bookingFee + gst);
     const payNowAmount = round2(depositAmount + baseamount);
-    return {
-      minimumSpend,
-      depositAmount,
-      bookingFee,
-      gst,
-      cgst,
-      baseamount,
-      payNowAmount,
-    };
-  }, [table, partySize, depositPercent, event]);
+    return { minimumSpend, depositAmount, bookingFee, gst, cgst, baseamount, payNowAmount };
+  }, [selected, depositPercent, event]);
 
   const dateBounds = useMemo(() => {
     if (!event) return { min: "", max: "" };
@@ -141,13 +153,13 @@ export default function TableBooking() {
 
   /* ---------- pay ---------- */
   const pay = async () => {
-    if (!layout || !table || !quote) return;
+    if (!layout || selected.length === 0 || !quote) return;
     if (!session) {
       router.push(`/login?next=${encodeURIComponent(`/event/table?event=${eventId}`)}`);
       return;
     }
-    if (!withinRange) {
-      setError(`This table seats ${table.minPartySize}–${table.maxPartySize} guests.`);
+    if (!allWithinRange) {
+      setError("Set a valid party size for each table.");
       return;
     }
     setError("");
@@ -155,12 +167,14 @@ export default function TableBooking() {
     try {
       const init = await initTableBooking({
         layoutId: layout._id,
-        areaId: table._id,
+        areaId: selected[0].table._id,
+        areaIds: selected.map((x) => x.table._id),
+        partySizes: selected.map((x) => x.pax),
         serviceDate,
         slotKey,
         partySize,
-        malePax: male,
-        femalePax: female,
+        malePax: menCount,
+        femalePax: women,
         clubId,
         eventId,
         minimumSpend: quote.minimumSpend,
@@ -189,7 +203,9 @@ export default function TableBooking() {
           name: session.user.fullname,
           email: session.user.email,
           contact: session.user.phone,
-          description: `${event?.title ?? "2BHK"} · ${table.label} · ${partySize} pax`,
+          description: `${event?.title ?? "2BHK"} · ${selected.length} table${
+            selected.length > 1 ? "s" : ""
+          } · ${partySize} pax`,
         }
       );
 
@@ -247,7 +263,7 @@ export default function TableBooking() {
         <p className="label mb-3 !text-primary">Table confirmed</p>
         <h1 className="h-display text-4xl md:text-5xl">Your table&apos;s locked in.</h1>
         <p className="mt-3 text-sm text-muted">
-          {event?.title} · {selected?.table.label} · {partySize} guests · Ref{" "}
+          {event?.title} · {partySize} guests · Ref{" "}
           <span className="text-cream">{bookingRef}</span>
         </p>
         {qrs.length > 0 && (
@@ -346,19 +362,20 @@ export default function TableBooking() {
         </div>
       ) : layout ? (
         <div className="mt-8">
-          <FloorMap layout={layout} selected={selected} onSelect={(zone, t) => setSelected({ zone, table: t })} />
+          <FloorMap layout={layout} selectedIds={selectedIds} onToggle={toggleTable} />
         </div>
       ) : null}
 
-      {/* slim Book Now bar — rises from the bottom once a table is picked */}
-      {table && !showModal && (
+      {/* slim Book Now bar — rises from the bottom once tables are picked */}
+      {selected.length > 0 && !showModal && (
         <div className="sticky bottom-4 z-30 mt-6">
           <div className="mx-auto flex max-w-xl items-center justify-between gap-4 rounded-full border border-line bg-elevated/95 py-3 pl-6 pr-3 shadow-lg shadow-black/40 backdrop-blur-md">
             <div className="min-w-0">
               <p className="truncate font-display text-sm font-medium uppercase">
-                {selected?.zone.label} · {table.label}
+                {selected.length} table{selected.length > 1 ? "s" : ""} ·{" "}
+                {selected.map((x) => x.table.label).join(", ")}
               </p>
-              <p className="text-xs text-muted">{inr(table.priceFromPerPerson)}/pax</p>
+              <p className="text-xs text-muted">Tap more tables to add · book together</p>
             </div>
             <button
               onClick={() => setShowModal(true)}
@@ -371,7 +388,7 @@ export default function TableBooking() {
       )}
 
       {/* booking details bottom-sheet */}
-      {table && quote && showModal && (
+      {selected.length > 0 && quote && showModal && (
         <div
           className="fixed inset-0 z-70 flex items-end justify-center bg-coal/80 backdrop-blur-sm sm:items-center"
           role="dialog"
@@ -386,13 +403,11 @@ export default function TableBooking() {
           >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <p className="label mb-1">Your table</p>
-                <p className="font-display text-xl font-semibold uppercase leading-tight">
-                  {selected?.zone.label} · {table.label}
+                <p className="label mb-1">
+                  Your table{selected.length > 1 ? "s" : ""} · {selected.length}
                 </p>
-                <p className="mt-1 text-xs text-muted">
-                  {inr(table.priceFromPerPerson)}/pax · seats {table.minPartySize}–
-                  {table.maxPartySize}
+                <p className="font-display text-xl font-semibold uppercase leading-tight">
+                  Party of {partySize}
                 </p>
               </div>
               <button
@@ -404,54 +419,87 @@ export default function TableBooking() {
               </button>
             </div>
 
-            {/* party size + gender split (required) */}
-            <p className="label mb-3">Party size</p>
-            <div className="grid grid-cols-2 gap-4">
-              {(
-                [
-                  ["Men", male, setMale],
-                  ["Women", female, setFemale],
-                ] as [string, number, (n: number) => void][]
-              ).map(([label, val, set]) => (
-                <div key={label} className="rounded-md border border-line p-3">
-                  <p className="label mb-2 !text-[0.5625rem]">{label}</p>
-                  <div className="flex items-center justify-between">
+            {/* per-table party size */}
+            <div className="space-y-3">
+              {selected.map(({ zone, table, pax }) => (
+                <div
+                  key={table._id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-line p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-sm font-medium uppercase">
+                      {zone.label} · {table.label}
+                    </p>
+                    <p className="text-xs text-muted">
+                      {inr(table.priceFromPerPerson)}/pax · seats {table.minPartySize}–
+                      {table.maxPartySize}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2.5">
                     <button
-                      onClick={() => set(Math.max(0, val - 1))}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors hover:border-cream"
-                      aria-label={`Fewer ${label}`}
+                      onClick={() => setPax(table._id, pax - 1)}
+                      disabled={pax <= table.minPartySize}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                      aria-label="Fewer guests"
                     >
                       −
                     </button>
-                    <span className="font-display text-lg tabular-nums">{val}</span>
+                    <span className="w-5 text-center font-display text-lg tabular-nums">{pax}</span>
                     <button
-                      onClick={() => set(val + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors hover:border-cream"
-                      aria-label={`More ${label}`}
+                      onClick={() => setPax(table._id, pax + 1)}
+                      disabled={pax >= table.maxPartySize}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                      aria-label="More guests"
                     >
                       +
+                    </button>
+                    <button
+                      onClick={() => toggleTable(zone, table)}
+                      aria-label="Remove table"
+                      className="label ml-1 !text-muted transition-colors hover:!text-primary"
+                    >
+                      ✕
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted">
-              Party of <span className="text-cream">{partySize}</span>
-              {!withinRange && partySize > 0 && (
-                <span className="text-primary">
-                  {" "}
-                  · seats {table.minPartySize}–{table.maxPartySize} only
-                </span>
-              )}
-              {partySize === 0 && <span className="text-primary"> · add at least 1 guest</span>}
-            </p>
+
+            {/* one gender split for the whole party: men slider, women = rest */}
+            <div className="mt-4 rounded-md border border-line p-3">
+              <div className="flex items-center justify-between">
+                <p className="label !text-[0.5625rem]">
+                  Men <span className="text-cream">{menCount}</span> · Women{" "}
+                  <span className="text-cream">{women}</span>
+                </p>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setMen(Math.max(0, menCount - 1))}
+                    disabled={menCount <= 0}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                    aria-label="Fewer men"
+                  >
+                    −
+                  </button>
+                  <span className="w-5 text-center font-display text-lg tabular-nums">
+                    {menCount}
+                  </span>
+                  <button
+                    onClick={() => setMen(Math.min(partySize, menCount + 1))}
+                    disabled={menCount >= partySize}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                    aria-label="More men"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
 
             {/* quote */}
             <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted">
-                  Minimum spend ({inr(table.priceFromPerPerson)} × {partySize})
-                </dt>
+                <dt className="text-muted">Minimum spend</dt>
                 <dd className="tabular-nums">{inr(quote.minimumSpend)}</dd>
               </div>
               <div className="flex justify-between gap-4">
@@ -475,7 +523,7 @@ export default function TableBooking() {
 
             <button
               onClick={pay}
-              disabled={!withinRange || phase === "paying"}
+              disabled={!allWithinRange || phase === "paying"}
               className="mt-5 w-full rounded-full bg-primary py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal disabled:opacity-50"
             >
               {phase === "paying" ? "Opening payment…" : `Book now · ${inr(quote.payNowAmount)}`}
