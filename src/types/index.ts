@@ -86,6 +86,11 @@ export interface RizztixEvent {
   languageList?: { _id: string; titleenglish: string }[];
   /** % booking fee applied on the ticket subtotal (GST added on top of the fee) */
   bookingpercentage?: number;
+  /** table booking config carried on the event */
+  tableBookingEnabled?: boolean;
+  tableBookingLayoutId?: string;
+  tableBookingViewkey?: string;
+  tableBookingSlotKey?: string;
   /** computed client-side flag: event has already started */
   isLive?: boolean;
 }
@@ -206,4 +211,132 @@ export interface RizztixUserTicket {
   qrcodeimage?: string;
   createdat?: string;
   createdAt?: string;
+}
+
+/* ---- Table booking (see Event_Wise_Table_Booking_Flow_API PDF + HAR) ---- */
+
+export interface TablePoint {
+  x: number;
+  y: number;
+}
+export interface TableHotspot extends TablePoint {
+  radius?: number;
+}
+
+/** a bookable leaf: a single table, or a zone with no tables */
+export interface TableSpot {
+  _id: string;
+  label: string;
+  hotspot: TableHotspot;
+  priceFromPerPerson: number;
+  currency?: string;
+  minPartySize: number;
+  maxPartySize: number;
+  legendStatus: string; // available | sold_out | unavailable
+  pinColor: string; // green | red | yellow | blue
+  statusLabel?: string;
+  selectable: boolean;
+  tablesLeft?: number;
+}
+
+/** a floor zone (may contain individual tables) */
+export interface TableZone extends TableSpot {
+  hasTables?: boolean;
+  outlinePolygon?: TablePoint[];
+  focusBounds?: { xMin: number; yMin: number; xMax: number; yMax: number };
+  tables?: TableSpot[];
+}
+
+export interface TableLayout {
+  _id: string;
+  viewkey: string;
+  title: string;
+  sceneimageurl: string;
+  slots: { key: string; label?: string; startTime?: string; endTime?: string }[];
+  areas: TableZone[];
+}
+
+export interface TableSlot {
+  key: string;
+  label?: string;
+  startTime?: string;
+  endTime?: string;
+  isDefaultForEvent?: boolean;
+}
+
+export interface TableSlotsResult {
+  slots: TableSlot[];
+  defaultSlotKey?: string;
+  assignedLayoutId?: string;
+  availableViewkeys?: string[];
+  clubId?: string;
+}
+
+export interface TableLayoutsResult {
+  depositPercent: number;
+  layouts: TableLayout[];
+  clubId?: string;
+}
+
+/** one guest QR of a table booking */
+export interface TableGuestQr {
+  guestIndex: number;
+  guestRef: string;
+  qrcodeimage?: string;
+  qrstring?: string;
+}
+
+/** POST /booking/init response — payment fields nest inside `booking` (per real HAR) */
+export interface TableInitResult {
+  booking: {
+    _id: string;
+    bookingref: string;
+    status?: string;
+    orderid: string;
+    payNowAmount: number;
+    amount: number;
+    currency?: string;
+    holdexpiresat?: string;
+    paymentProvider?: string;
+    razorpayKeyId?: string;
+    payment_session_id?: string | null;
+    cashfreeAppId?: string;
+    cashfreeEnv?: string;
+  };
+}
+
+/** a table booking as returned by confirm / mine / getBooking */
+export interface TableBooking {
+  _id: string;
+  bookingref: string;
+  status: string; // PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
+  minimumSpend: number;
+  depositAmount: number;
+  payNowAmount: number;
+  amount: number;
+  gst: number;
+  bookingFee: number;
+  depositPercent: number;
+  currency?: string;
+  serviceDate: string;
+  slotKey: string;
+  partySize: number;
+  malePax?: number;
+  femalePax?: number;
+  orderid?: string;
+  holdexpiresat?: string | null;
+  paymentProvider?: string;
+  payment_session_id?: string | null;
+  cashfreeEnv?: string;
+  eventId?: string;
+  eventTitle?: string;
+  areaLabel?: string;
+  areaId?: string;
+  table?: { zoneLabel?: string; tableLabel?: string; displayLabel?: string };
+  qrcodeimage?: string;
+  guestQrcodes?: TableGuestQr[];
+  guestQrCount?: number;
+  guestQrReady?: number;
+  balance?: { remainingAmount?: number; venueBalanceStatus?: string };
+  eventid?: { _id?: string; title?: string; image?: string; startdatetime?: string };
 }

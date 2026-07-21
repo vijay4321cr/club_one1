@@ -5,12 +5,14 @@ import Button from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import TicketModal from "@/components/account/TicketModal";
 import TicketCard from "@/components/account/TicketCard";
+import TableBookingCard from "@/components/account/TableBookingCard";
 import { logout, ApiError } from "@/lib/auth";
 import { sendFeedback, getAllTicketDetails } from "@/lib/api";
+import { getMyTableBookings } from "@/lib/tableApi";
 import { useAuth } from "@/lib/useAuth";
-import type { RizztixTicketDetail } from "@/types";
+import type { RizztixTicketDetail, TableBooking } from "@/types";
 
-type Tab = "tickets" | "profile" | "feedback";
+type Tab = "tickets" | "tables" | "profile" | "feedback";
 
 /** display "+91 XXXXXXXXXX" without doubling a country code the API included */
 function displayPhone(phone: string) {
@@ -34,17 +36,25 @@ export default function AccountPage() {
   const [feedback, setFeedback] = useState({ title: "", description: "" });
   const [feedbackState, setFeedbackState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [openTicket, setOpenTicket] = useState<RizztixTicketDetail | null>(null);
+  const [tables, setTables] = useState<TableBooking[] | null>(null);
 
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     (async () => {
       try {
-        const all = await getAllTicketDetails();
-        if (!cancelled) setTickets(all);
+        const [all, tb] = await Promise.all([
+          getAllTicketDetails(),
+          getMyTableBookings().catch(() => []),
+        ]);
+        if (!cancelled) {
+          setTickets(all);
+          setTables(tb);
+        }
       } catch (e) {
         if (!cancelled) {
           setTickets([]);
+          setTables([]);
           if (!(e instanceof ApiError && e.status === 401)) {
             setError(e instanceof ApiError ? e.message : "Could not load your bookings.");
           }
@@ -100,6 +110,7 @@ export default function AccountPage() {
         {(
           [
             ["tickets", "Ticket bookings"],
+            ["tables", "Table bookings"],
             ["profile", "Profile"],
             ["feedback", "Feedback"],
           ] as [Tab, string][]
@@ -133,6 +144,27 @@ export default function AccountPage() {
             <div className="space-y-3">
               {tickets.map((t) => (
                 <TicketCard key={t._id} ticket={t} onView={setOpenTicket} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "tables" && (
+        <div className="mt-8">
+          {tables === null ? (
+            <p className="label">Loading your table bookings…</p>
+          ) : tables.length === 0 ? (
+            <div className="rounded-sm border border-line p-8 text-center">
+              <p className="text-sm text-muted">No table bookings yet.</p>
+              <Button href="/event" className="mt-5">
+                Browse events
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tables.map((b) => (
+                <TableBookingCard key={b._id} booking={b} />
               ))}
             </div>
           )}

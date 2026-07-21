@@ -6,32 +6,10 @@ import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import { authFetch, ApiError } from "@/lib/auth";
+import { openCheckout } from "@/lib/payment";
 import { useAuth } from "@/lib/useAuth";
 import { inr, eventDateLong } from "@/lib/format";
 import type { RizztixEvent, RizztixOrder, RizztixConfirm, RizztixTicketLine } from "@/types";
-
-/* Razorpay checkout.js global (fallback provider) */
-declare global {
-  interface Window {
-    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-  }
-}
-
-let razorpayLoader: Promise<boolean> | null = null;
-function loadRazorpay(): Promise<boolean> {
-  if (window.Razorpay) return Promise.resolve(true);
-  razorpayLoader ??= new Promise((resolve) => {
-    const s = document.createElement("script");
-    s.src = "https://checkout.razorpay.com/v1/checkout.js";
-    s.onload = () => resolve(true);
-    s.onerror = () => {
-      razorpayLoader = null;
-      resolve(false);
-    };
-    document.body.appendChild(s);
-  });
-  return razorpayLoader;
-}
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -133,134 +111,62 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
         },
       });
 
-      // 2. open the provider's checkout
-      const sessionId =
-        order.payment_session_id && order.payment_session_id !== "null"
-          ? order.payment_session_id
-          : undefined;
-
-      if (sessionId) {
-        /* ---- Cashfree ---- */
-        const { load } = await import("@cashfreepayments/cashfree-js");
-        const attempt = async (mode: "sandbox" | "production") => {
-          const cashfree = await load({ mode });
-          return cashfree.checkout({
-            paymentSessionId: sessionId,
-            redirectTarget: "_modal",
-          });
-        };
-
-        // the backend tells us which environment created the session
-        const configured: "sandbox" | "production" =
-          order.cashfreeEnv === "production"
-            ? "production"
-            : order.cashfreeEnv === "sandbox"
-              ? "sandbox"
-              : process.env.NEXT_PUBLIC_CASHFREE_MODE === "production"
-                ? "production"
-                : "sandbox";
-        let result = await attempt(configured);
-
-        // env mismatch (session created for the other Cashfree environment)
-        // surfaces as "payment_session_id_invalid" — retry in the other mode
-        const invalidSession = (r: typeof result) =>
-          !!r.error &&
-          /payment_session_id/i.test(
-            String((r.error as { code?: string }).code ?? r.error.message ?? "")
-          );
-        if (invalidSession(result)) {
-          result = await attempt(configured === "sandbox" ? "production" : "sandbox");
-        }
-
-        if (result.error) {
-          setError(result.error.message ?? "Payment was not completed.");
-        } else {
-          // close the summary modal immediately — verification gets its own
-          // full-screen state instead of a lingering "Opening…" popup
-          setShowConfirm(false);
-          setConfirming(true);
-          // MANDATORY: backend verifies the payment with Cashfree and issues
-          // the ticket — only after this succeeds do we show "confirmed"
-          try {
-            const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
-              body: {
-                order_id: order.orderid,
-                event_id: event._id,
-              },
-            });
-            setSuccess({
-              bookingref: confirmed.bookingref ?? order.bookingref,
-              amount: total,
-              lines,
-            });
-          } catch (e) {
-            setError(
-              e instanceof ApiError
-                ? `Payment confirmation failed: ${e.message}. Your booking ref is ${order.bookingref} — if you were charged, check My Account or contact us.`
-                : `Payment confirmation failed — your booking ref is ${order.bookingref}. If you were charged, check My Account or contact us.`
-            );
-          } finally {
-            setConfirming(false);
-          }
-        }
-        setPaying(false);
-      } else if (order.razorpayKeyId) {
-        /* ---- Razorpay fallback ---- */
-        if (!(await loadRazorpay()) || !window.Razorpay) {
-          setError("Could not load the payment window — check your connection and try again.");
-          setPaying(false);
-          return;
-        }
-        const rzp = new window.Razorpay({
-          key: order.razorpayKeyId,
-          order_id: order.orderid,
-          amount: Math.round(total * 100),
-          currency: order.currency ?? "INR",
-          name: "2BHK — Bar ‹Hauté› Kitchen",
+      // 2. open the gateway (shared Cashfree/Razorpay helper)
+      const result = await openCheckout(
+        {
+          orderid: order.orderid,
+          amount: total,
+          currency: order.currency,
+          payment_session_id: order.payment_session_id,
+          cashfreeEnv: order.cashfreeEnv,
+          razorpayKeyId: order.razorpayKeyId,
+        },
+        {
+          name: session.user.fullname,
+          email: session.user.email,
+          contact: session.user.phone,
           description: `${event.title} · ${totalQty} ticket${totalQty > 1 ? "s" : ""}`,
-          prefill: {
-            name: session.user.fullname,
-            email: session.user.email,
-            contact: session.user.phone,
-          },
-          theme: { color: "#e10600" },
-          modal: { ondismiss: () => setPaying(false) },
-          handler: async (resp: {
-            razorpay_order_id: string;
-            razorpay_payment_id: string;
-            razorpay_signature: string;
-          }) => {
-            setShowConfirm(false);
-            setConfirming(true);
-            try {
-              const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
-                body: {
+        }
+      );
+
+      if (result.status === "dismissed") {
+        setPaying(false);
+        return;
+      }
+      if (result.status === "error" || result.status === "no_provider") {
+        setError(
+          result.status === "error"
+            ? result.message
+            : "The box office didn't return a payment method — try again later."
+        );
+        setPaying(false);
+        return;
+      }
+
+      // 3. MANDATORY confirm — only then show success
+      setShowConfirm(false);
+      setConfirming(true);
+      try {
+        const confirmed = await authFetch<RizztixConfirm>("/order/confirmPayment", {
+          body:
+            result.status === "cashfree"
+              ? { order_id: result.order_id, event_id: event._id }
+              : {
                   event_id: event._id,
-                  razorpay_order_id: resp.razorpay_order_id,
-                  razorpay_payment_id: resp.razorpay_payment_id,
-                  razorpay_signature: resp.razorpay_signature,
+                  razorpay_order_id: result.razorpay_order_id,
+                  razorpay_payment_id: result.razorpay_payment_id,
+                  razorpay_signature: result.razorpay_signature,
                 },
-              });
-              setSuccess({
-                bookingref: confirmed.bookingref ?? order.bookingref,
-                amount: total,
-                lines,
-              });
-            } catch (e) {
-              setError(
-                e instanceof ApiError
-                  ? `Payment went through but confirmation failed: ${e.message}. Your booking ref is ${order.bookingref}.`
-                  : "Payment confirmation failed — check My Account or contact us."
-              );
-            } finally {
-              setConfirming(false);
-              setPaying(false);
-            }
-          },
         });
-        rzp.open();
-      } else {
-        setError("The box office didn't return a payment method — please try again later.");
+        setSuccess({ bookingref: confirmed.bookingref ?? order.bookingref, amount: total, lines });
+      } catch (e) {
+        setError(
+          e instanceof ApiError
+            ? `Payment confirmation failed: ${e.message}. Your booking ref is ${order.bookingref} — if you were charged, check My Account or contact us.`
+            : `Payment confirmation failed — your booking ref is ${order.bookingref}. If you were charged, check My Account or contact us.`
+        );
+      } finally {
+        setConfirming(false);
         setPaying(false);
       }
     } catch (e) {

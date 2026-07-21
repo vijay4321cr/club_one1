@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import FxReveal from "@/components/ui/FxReveal";
+import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import TicketPurchase from "@/components/events/TicketPurchase";
 import ArtistBadge from "@/components/events/ArtistBadge";
@@ -86,6 +87,13 @@ export default function EventDetail() {
             <p className="mt-5 font-serif text-lg italic text-cream/80 md:text-xl">
               {eventDateLong(event.startdatetime)} — {eventDateLong(event.enddatetime)}
             </p>
+            {event.tableBookingEnabled && (
+              <div className="mt-6">
+                <Button href={`/event/table?event=${event._id}`} variant="outline">
+                  Book a Table
+                </Button>
+              </div>
+            )}
           </div>
           <FxReveal effect="burn" className="overflow-hidden rounded-sm">
             <div className="relative aspect-[4/5] w-full bg-surface md:aspect-[4/3]">
