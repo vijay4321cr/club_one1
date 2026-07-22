@@ -9,7 +9,7 @@ export default function Faq() {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <section className="mx-auto max-w-4xl px-5 py-20 md:px-8 md:py-28">
+    <section className="mx-auto max-w-4xl px-5 py-12 md:px-8 md:py-16">
       <SectionHeading label="Good to know" title="FAQ" />
       <div className="divide-y divide-line border-b border-line">
         {faqs.map((f, i) => {

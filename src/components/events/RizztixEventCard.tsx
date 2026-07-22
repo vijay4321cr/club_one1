@@ -55,12 +55,22 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
           </p>
         )}
 
-        <TransitionLink
-          href={`/event/view?id=${event._id}`}
-          className="mt-4 rounded-full bg-primary py-2.5 text-center text-[0.6875rem] font-medium uppercase tracking-[0.16em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
-        >
-          Tickets & Info
-        </TransitionLink>
+        <div className="mt-auto flex gap-2 pt-4">
+          <TransitionLink
+            href={`/event/view?id=${event._id}`}
+            className="flex-1 rounded-full bg-primary py-2.5 text-center text-[0.6875rem] font-medium uppercase tracking-[0.16em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
+          >
+            Tickets & Info
+          </TransitionLink>
+          {event.tableBookingEnabled && (
+            <TransitionLink
+              href={`/event/table?event=${event._id}`}
+              className="flex-1 rounded-full border border-primary py-2.5 text-center text-[0.6875rem] font-medium uppercase tracking-[0.16em] text-primary transition-colors duration-300 hover:bg-primary hover:text-cream"
+            >
+              Book a Table
+            </TransitionLink>
+          )}
+        </div>
       </div>
     </article>
   );

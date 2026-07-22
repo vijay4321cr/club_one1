@@ -10,7 +10,7 @@ interface Props {
 
 export default function SectionHeading({ label, title, right, className = "" }: Props) {
   return (
-    <Reveal className={`mb-10 md:mb-14 ${className}`}>
+    <Reveal className={`mb-7 md:mb-9 ${className}`}>
       <div className="flex items-end justify-between gap-6 border-b border-line pb-6">
         <div>
           <p className="label mb-3">{label}</p>

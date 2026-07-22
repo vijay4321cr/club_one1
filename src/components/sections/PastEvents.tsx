@@ -14,14 +14,14 @@ export default function PastEvents({ events }: { events: ClubEvent[] }) {
   }));
 
   return (
-    <section className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
+    <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
       <SectionHeading label="The Nights So Far" title={<>Past<br />Highlights</>} />
 
       {/* 3D spinning ring of past-event posters (drag to spin) */}
       <Ring3D items={ringItems} />
 
       {/* artists who performed — wipes in from the left */}
-      <FxReveal effect="wipe" className="mt-16 md:mt-20">
+      <FxReveal effect="wipe" className="mt-10 md:mt-12">
         <p className="label mb-5">Artists Who Performed</p>
       </FxReveal>
       <FxReveal effect="wipe" delay={0.15}>

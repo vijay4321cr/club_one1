@@ -15,7 +15,7 @@ const ratios: Record<GalleryItem["ratio"], string> = {
  */
 export default function GallerySection({ items }: { items: GalleryItem[] }) {
   return (
-    <section className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
+    <section className="mx-auto max-w-7xl px-5 py-12 md:px-8 md:py-16">
       <SectionHeading
         label="From The Floor"
         title="Gallery"

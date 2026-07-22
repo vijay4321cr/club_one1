@@ -20,6 +20,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
 
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [natSize, setNatSize] = useState({ w: 0, h: 0 }); // render-safe copy of nat ref
 
   const zone = layout.areas.find((z) => z._id === zoneId) ?? null;
   const selectedSet = new Set(selectedIds);
@@ -90,22 +91,57 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     [apply]
   );
 
-  /* image load → measure, fit */
+  /* a zone's frame — explicit focusBounds, else derived from its tables/outline */
+  const boundsForZone = useCallback((z: TableZone) => {
+    if (z.focusBounds) return z.focusBounds;
+    const pts = [
+      ...(z.tables?.length ? z.tables.map((t) => t.hotspot) : [z.hotspot]),
+      ...(z.outlinePolygon ?? []),
+    ];
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const pad = 0.035;
+    return {
+      xMin: Math.min(...xs) - pad,
+      yMin: Math.min(...ys) - pad,
+      xMax: Math.max(...xs) + pad,
+      yMax: Math.max(...ys) + pad,
+    };
+  }, []);
+
+  const focusZone = useCallback(
+    (z: TableZone, zoom = true) => {
+      setZoneId(z._id);
+      if (zoom) requestAnimationFrame(() => focusBounds(boundsForZone(z)));
+    },
+    [boundsForZone, focusBounds]
+  );
+
+  // a nice zone to open by default so the map lands "showcasing" a section
+  const defaultZone =
+    layout.areas.find((z) => z.tables?.some((t) => t.pinColor === "green")) ??
+    layout.areas.find((z) => z.tables?.length) ??
+    null;
+
+  /* image load → measure, fit, then smoothly showcase a zone */
   const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     nat.current = { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight };
+    setNatSize(nat.current);
     fit();
-    setReady(true);
+    // let the fitted plan paint, fade the loader, then glide into a zone
+    setTimeout(() => setReady(true), 150);
+    if (defaultZone) setTimeout(() => focusZone(defaultZone), 650);
   };
 
-  /* refit on resize while in overview */
+  /* refit on resize — keep the focused zone framed */
   useEffect(() => {
     const onResize = () => {
       if (!zoneId) fit();
-      else if (zone?.focusBounds) focusBounds(zone.focusBounds);
+      else if (zone) focusBounds(boundsForZone(zone));
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [zoneId, zone, fit, focusBounds]);
+  }, [zoneId, zone, fit, focusBounds, boundsForZone]);
 
   /* wheel zoom (non-passive so we can preventDefault) */
   useEffect(() => {
@@ -190,10 +226,6 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     zoomAt(vp.clientWidth / 2, vp.clientHeight / 2, view.current.s * (dir > 0 ? 1.4 : 1 / 1.4), true);
   };
 
-  const openZone = (z: TableZone) => {
-    setZoneId(z._id);
-    if (z.focusBounds) requestAnimationFrame(() => focusBounds(z.focusBounds!));
-  };
   const backToOverview = () => {
     setZoneId(null);
     requestAnimationFrame(() => fit());
@@ -201,8 +233,17 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
 
   const pinColor = (c: string) =>
     c === "green" ? "#22c55e" : c === "red" ? "#e10600" : c === "blue" ? "#3b82f6" : "#c9a227";
+  const pinTop = (c: string) =>
+    c === "green" ? "#bbf7d0" : c === "red" ? "#ff6b66" : c === "blue" ? "#93c5fd" : "#f0d878";
 
-  const px = (n: number, axis: "w" | "h") => n * (axis === "w" ? nat.current.w : nat.current.h);
+  const px = (n: number, axis: "w" | "h") => n * (axis === "w" ? natSize.w : natSize.h);
+
+  // every bookable spot from every zone stays on the map at all zoom levels
+  const flatSpots = layout.areas.flatMap((z) =>
+    z.tables?.length
+      ? z.tables.map((t) => ({ spot: t, zone: z, isZoneItself: false }))
+      : [{ spot: z as TableSpot, zone: z, isZoneItself: true }]
+  );
 
   return (
     <div>
@@ -251,7 +292,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
             −
           </button>
           <button
-            onClick={() => (zone?.focusBounds ? focusBounds(zone.focusBounds) : fit())}
+            onClick={() => (zone ? focusBounds(boundsForZone(zone)) : fit())}
             aria-label="Reset view"
             className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-xs font-semibold text-coal shadow-lg shadow-black/40 transition-transform hover:scale-105"
           >
@@ -263,7 +304,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
         <div
           ref={layerRef}
           className="absolute left-0 top-0 origin-top-left"
-          style={{ width: nat.current.w || "100%", height: nat.current.h || "auto", ["--s" as string]: "1" }}
+          style={{ width: natSize.w || "100%", height: natSize.h || "auto", ["--s" as string]: "1" }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -275,10 +316,10 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
           />
 
           {/* zone polygons — clickable in overview (tap anywhere in the area) */}
-          {nat.current.w > 0 && (
+          {natSize.w > 0 && (
             <svg
               className="absolute inset-0 h-full w-full"
-              viewBox={`0 0 ${nat.current.w} ${nat.current.h}`}
+              viewBox={`0 0 ${natSize.w} ${natSize.h}`}
               preserveAspectRatio="none"
             >
               {layout.areas.map((z) => {
@@ -286,116 +327,159 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                 const pts = z.outlinePolygon.map((p) => `${px(p.x, "w")},${px(p.y, "h")}`).join(" ");
                 const focused = zone?._id === z._id;
                 const hasSel = zonesWithSelection.has(z._id);
-                const clickable = !zone && z.selectable !== false;
+                const clickable = z.selectable !== false && !!z.tables?.length;
                 return (
                   <polygon
                     key={z._id}
                     points={pts}
                     onClick={() => {
                       if (dragged.current) return;
-                      if (!zone && z.tables?.length) openZone(z);
+                      if (clickable) focusZone(z);
                     }}
-                    className={clickable ? "cursor-pointer" : ""}
+                    className={clickable ? "cursor-pointer transition-all" : ""}
                     fill={
                       focused
-                        ? "rgba(245,245,240,0.05)"
+                        ? "rgba(34,197,94,0.10)"
                         : hasSel
-                          ? "rgba(34,197,94,0.14)"
+                          ? "rgba(34,197,94,0.12)"
                           : clickable
-                            ? "rgba(245,245,240,0.03)"
+                            ? "rgba(245,245,240,0.02)"
                             : "transparent"
                     }
-                    stroke={focused ? "rgba(245,245,240,0.95)" : hasSel ? "#22c55e" : "rgba(245,245,240,0.35)"}
-                    strokeWidth={2}
+                    stroke={
+                      focused
+                        ? "#22c55e"
+                        : hasSel
+                          ? "rgba(34,197,94,0.7)"
+                          : "rgba(245,245,240,0.28)"
+                    }
+                    strokeWidth={focused ? 2.5 : 1.5}
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
-                    style={{ pointerEvents: zone ? "none" : "auto" }}
+                    style={{ pointerEvents: clickable ? "auto" : "none" }}
                   />
                 );
               })}
             </svg>
           )}
 
-          {/* pins */}
-          {nat.current.w > 0 &&
-            (() => {
-              const spots: (TableSpot & { isZone?: boolean; zoneRef?: TableZone })[] = zone
-                ? (zone.tables?.length ? zone.tables : [{ ...zone }]).map((t) => ({ ...t, zoneRef: zone }))
-                : layout.areas.map((z) => ({ ...z, isZone: true }));
-              return spots.map((s) => {
-                const isSel = s.isZone ? zonesWithSelection.has(s._id) : selectedSet.has(s._id);
-                const clickable = s.selectable !== false;
-                const color = pinColor(s.pinColor);
-                const showPrice = !s.isZone && s.pinColor === "green";
-                return (
-                  <button
-                    key={s._id}
-                    disabled={!clickable && !s.isZone}
-                    onClick={() => {
-                      if (dragged.current) return;
-                      if (s.isZone && s.tables?.length) openZone(s as TableZone);
-                      else if (zone) onToggle(zone, s);
-                    }}
-                    className="absolute p-3"
-                    style={{
-                      left: px(s.hotspot.x, "w"),
-                      top: px(s.hotspot.y, "h"),
-                      transform: "translate(-50%, -50%) scale(calc(1 / var(--s, 1)))",
-                      transformOrigin: "center",
-                    }}
-                    aria-label={s.label}
-                  >
-                    <span className="relative flex items-center justify-center">
-                      {isSel && (
-                        <span
-                          className="absolute h-9 w-9 animate-ping rounded-full opacity-60"
-                          style={{ backgroundColor: color }}
-                        />
-                      )}
-                      <span
-                        className="block rounded-full transition-transform group-hover:scale-110"
-                        style={{
-                          backgroundColor: color,
-                          width: isSel ? 22 : 15,
-                          height: isSel ? 22 : 15,
-                          boxShadow: isSel
-                            ? `0 0 0 3px #f5f5f0, 0 0 16px 3px ${color}`
-                            : `0 0 0 2px rgba(13,13,13,0.9), 0 0 10px 1px ${color}aa`,
-                          opacity: clickable || s.isZone ? 1 : 0.65,
-                        }}
-                      />
-                      {isSel && (
-                        <span className="absolute text-[11px] font-bold text-coal">✓</span>
-                      )}
-                    </span>
+          {/* pins — every table on the map; the focused zone's are emphasised */}
+          {natSize.w > 0 &&
+            flatSpots.map(({ spot, zone: z, isZoneItself }) => {
+              const isSel = selectedSet.has(spot._id);
+              const clickable = spot.selectable !== false;
+              const inFocus = zone?._id === z._id;
+              const color = pinColor(spot.pinColor);
+              const top = pinTop(spot.pinColor);
+              const available = spot.pinColor === "green";
+              // labels only where it matters — focused zone (or a selection) —
+              // so the map isn't buried under 50 price tags
+              const showLabel = (inFocus || isSel) && (available || isSel);
+              const emphasised = inFocus || isSel;
 
-                    {/* label */}
+              return (
+                <button
+                  key={spot._id}
+                  disabled={!clickable}
+                  onClick={() => {
+                    if (dragged.current) return;
+                    if (isZoneItself && z.tables?.length) focusZone(z);
+                    else {
+                      setZoneId(z._id); // light up the whole zone…
+                      onToggle(z, spot); // …and toggle this table
+                    }
+                  }}
+                  className="group absolute p-2.5"
+                  style={{
+                    left: px(spot.hotspot.x, "w"),
+                    top: px(spot.hotspot.y, "h"),
+                    transform: "translate(-50%, -50%) scale(calc(1 / var(--s, 1)))",
+                    transformOrigin: "center",
+                    zIndex: emphasised ? 3 : 1,
+                  }}
+                  aria-label={spot.label}
+                >
+                  <span className="relative flex items-center justify-center">
+                    {/* pulsing ring on selected */}
+                    {isSel && (
+                      <span
+                        className="absolute inline-flex h-8 w-8 animate-ping rounded-full border-2 opacity-70"
+                        style={{ borderColor: color }}
+                      />
+                    )}
+                    {/* soft glow halo */}
                     <span
-                      className={`pointer-events-none absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide backdrop-blur-sm ${
-                        isSel ? "bg-green-500 text-coal" : "bg-coal/90 text-cream"
+                      className="absolute rounded-full blur-[3px] transition-all duration-300"
+                      style={{
+                        width: emphasised ? 26 : 16,
+                        height: emphasised ? 26 : 16,
+                        background: color,
+                        opacity: available ? (emphasised ? 0.55 : 0.3) : 0.25,
+                      }}
+                    />
+                    {/* glossy bead */}
+                    <span
+                      className="relative block rounded-full transition-all duration-300 group-hover:scale-110"
+                      style={{
+                        width: isSel ? 22 : emphasised ? 17 : 13,
+                        height: isSel ? 22 : emphasised ? 17 : 13,
+                        background: `radial-gradient(circle at 34% 28%, ${top} 0%, ${color} 55%, ${color} 100%)`,
+                        border: isSel ? "2px solid #f5f5f0" : "1.5px solid rgba(255,255,255,0.85)",
+                        boxShadow: isSel
+                          ? `0 4px 10px rgba(0,0,0,0.5), 0 0 18px 3px ${color}`
+                          : `0 2px 5px rgba(0,0,0,0.55), 0 0 8px ${color}88`,
+                        opacity: clickable ? 1 : 0.55,
+                      }}
+                    />
+                    {isSel && (
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="absolute h-3 w-3 text-coal"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      >
+                        <path d="M4 12l5 5L20 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+
+                  {/* label */}
+                  {showLabel && (
+                    <span
+                      className={`pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide ${
+                        isSel ? "bg-green-500 text-coal" : "bg-coal/92 text-cream"
                       }`}
-                      style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
+                      style={{ boxShadow: "0 3px 10px rgba(0,0,0,0.5)" }}
                     >
-                      {s.isZone ? (
+                      {isZoneItself && !z.tables?.length ? (
                         <>
-                          {s.label}
-                          {s.tablesLeft ? ` · ${s.tablesLeft} left` : ""}
-                        </>
-                      ) : showPrice ? (
-                        <>
-                          From {inr(s.priceFromPerPerson)}/pax · {s.maxPartySize} pax
+                          {spot.label}
+                          {spot.tablesLeft ? ` · ${spot.tablesLeft} left` : ""}
                         </>
                       ) : (
-                        s.label
+                        <>
+                          From {inr(spot.priceFromPerPerson)}/pax · {spot.maxPartySize} pax
+                        </>
                       )}
                     </span>
-                  </button>
-                );
-              });
-            })()}
+                  )}
+                </button>
+              );
+            })}
         </div>
 
-        {!ready && <div className="absolute inset-0 animate-pulse bg-surface" />}
+        {/* loader — spinner over a shimmer until the plan is measured & framed */}
+        {!ready && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4">
+            <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-surface via-coal to-surface" />
+            <div className="relative h-10 w-10">
+              <span className="absolute inset-0 rounded-full border-2 border-line" />
+              <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-primary" />
+            </div>
+            <p className="label relative !text-muted">Loading floor plan…</p>
+          </div>
+        )}
       </div>
 
       <p className="mt-3 text-center text-xs text-muted">

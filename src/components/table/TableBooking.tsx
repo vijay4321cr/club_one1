@@ -18,7 +18,7 @@ import {
   confirmTableBooking,
 } from "@/lib/tableApi";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
-import { inr } from "@/lib/format";
+import { inr, inrExact } from "@/lib/format";
 import type { TableLayout, TableZone, TableSpot, TableGuestQr } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -500,22 +500,22 @@ export default function TableBooking() {
             <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Minimum spend</dt>
-                <dd className="tabular-nums">{inr(quote.minimumSpend)}</dd>
+                <dd className="tabular-nums">{inrExact(quote.minimumSpend)}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Deposit now ({depositPercent}%)</dt>
-                <dd className="tabular-nums">{inr(quote.depositAmount)}</dd>
+                <dd className="tabular-nums">{inrExact(quote.depositAmount)}</dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-muted">Booking fee + GST</dt>
-                <dd className="tabular-nums">{inr(quote.baseamount)}</dd>
+                <dd className="tabular-nums">{inrExact(quote.baseamount)}</dd>
               </div>
               <div className="mt-1 flex justify-between gap-4 rounded-md border border-line bg-elevated px-4 py-3 text-base">
                 <dt className="font-display font-semibold uppercase">Pay now</dt>
-                <dd className="h-display tabular-nums">{inr(quote.payNowAmount)}</dd>
+                <dd className="h-display tabular-nums">{inrExact(quote.payNowAmount)}</dd>
               </div>
               <p className="text-[0.6875rem] text-muted">
-                {inr(quote.minimumSpend - quote.depositAmount)} balance is redeemable at the venue.
+                {inrExact(quote.minimumSpend - quote.depositAmount)} balance is redeemable at the venue.
               </p>
             </dl>
 
@@ -526,7 +526,7 @@ export default function TableBooking() {
               disabled={!allWithinRange || phase === "paying"}
               className="mt-5 w-full rounded-full bg-primary py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal disabled:opacity-50"
             >
-              {phase === "paying" ? "Opening payment…" : `Book now · ${inr(quote.payNowAmount)}`}
+              {phase === "paying" ? "Opening payment…" : `Book now · ${inrExact(quote.payNowAmount)}`}
             </button>
             {!session && (
               <p className="mt-2 text-center text-xs text-muted">

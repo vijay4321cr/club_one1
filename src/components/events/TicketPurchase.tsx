@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
-import TransitionLink from "@/components/ui/TransitionLink";
 import { authFetch, ApiError } from "@/lib/auth";
 import { openCheckout } from "@/lib/payment";
 import { useAuth } from "@/lib/useAuth";
-import { inr, eventDateLong } from "@/lib/format";
+import { inr, inrExact, eventDateLong } from "@/lib/format";
 import type { RizztixEvent, RizztixOrder, RizztixConfirm, RizztixTicketLine } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -77,14 +76,66 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
     };
   }, [showConfirm]);
 
+  /* keep the cart alive across navigation (Terms) and the login round-trip */
+  const cartKey = `bhk:cart:${event._id}`;
+  const resumeKey = `bhk:resume:${event._id}`;
+
+  // restore the cart on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(cartKey);
+      if (raw) setQty(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // persist the cart whenever it changes
+  useEffect(() => {
+    try {
+      if (Object.values(qty).some((n) => n > 0)) {
+        sessionStorage.setItem(cartKey, JSON.stringify(qty));
+      } else {
+        sessionStorage.removeItem(cartKey);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [qty, cartKey]);
+
+  // after signing in, drop the user straight back into the confirmation popup
+  useEffect(() => {
+    if (!session) return;
+    try {
+      if (sessionStorage.getItem(resumeKey) && sessionStorage.getItem(cartKey)) {
+        sessionStorage.removeItem(resumeKey);
+        setShowConfirm(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [session, resumeKey, cartKey]);
+
   const setCount = (id: string, n: number) =>
     setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(10, n)) }));
 
   /* ---------------- payment ---------------- */
 
+  const goLogin = () => {
+    // remember we were mid-checkout so login can bounce back into the popup
+    try {
+      sessionStorage.setItem(resumeKey, "1");
+      sessionStorage.setItem(cartKey, JSON.stringify(qty));
+    } catch {
+      /* ignore */
+    }
+    router.push(`/login?next=${encodeURIComponent(`/event/view?id=${event._id}`)}`);
+  };
+
   const pay = async () => {
     if (!session) {
-      router.push(`/login?next=${encodeURIComponent(`/event/view?id=${event._id}`)}`);
+      goLogin();
       return;
     }
     if (lines.length === 0 || paying) return;
@@ -159,6 +210,12 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                 },
         });
         setSuccess({ bookingref: confirmed.bookingref ?? order.bookingref, amount: total, lines });
+        try {
+          sessionStorage.removeItem(cartKey);
+          sessionStorage.removeItem(resumeKey);
+        } catch {
+          /* ignore */
+        }
       } catch (e) {
         setError(
           e instanceof ApiError
@@ -171,7 +228,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        router.push(`/login?next=${encodeURIComponent(`/event/view?id=${event._id}`)}`);
+        goLogin();
       } else {
         setError(e instanceof ApiError ? e.message : "Could not start the booking — try again.");
       }
@@ -368,7 +425,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               <div className="mt-4 space-y-3 border-t border-line pt-4 text-sm">
                 <div className="flex justify-between gap-4">
                   <span className="font-display font-medium uppercase">Tickets subtotal</span>
-                  <span className="tabular-nums">{inr(subtotal)}</span>
+                  <span className="tabular-nums">{inrExact(subtotal)}</span>
                 </div>
                 {/* booking fee with expandable CGST/SGST breakdown */}
                 <button
@@ -387,7 +444,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                       ▾
                     </span>
                   </span>
-                  <span className="tabular-nums">{inr(bookingFee)}</span>
+                  <span className="tabular-nums">{inrExact(bookingFee)}</span>
                 </button>
                 <div
                   className={`grid transition-all duration-300 ${
@@ -398,15 +455,15 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                     <div className="space-y-2 pl-3 text-xs text-muted">
                       <div className="flex justify-between gap-4">
                         <span>Base fee ({feePercent}%)</span>
-                        <span className="tabular-nums">{inr(baseprice)}</span>
+                        <span className="tabular-nums">{inrExact(baseprice)}</span>
                       </div>
                       <div className="flex justify-between gap-4">
                         <span>CGST (9%)</span>
-                        <span className="tabular-nums">{inr(round2(baseprice * 0.09))}</span>
+                        <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
                       </div>
                       <div className="flex justify-between gap-4">
                         <span>SGST (9%)</span>
-                        <span className="tabular-nums">{inr(round2(baseprice * 0.09))}</span>
+                        <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
                       </div>
                     </div>
                   </div>
@@ -414,17 +471,20 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               </div>
               <div className="mt-4 flex justify-between gap-4 rounded-md border border-line bg-surface px-4 py-3">
                 <span className="font-display font-semibold uppercase">Total amount</span>
-                <span className="h-display text-lg tabular-nums">{inr(total)}</span>
+                <span className="h-display text-lg tabular-nums">{inrExact(total)}</span>
               </div>
             </div>
 
-            {/* T&C */}
-            <TransitionLink
+            {/* T&C — opens in a new tab so the checkout popup & selection stay put */}
+            <a
               href="/legal/terms"
-              className="mt-4 block rounded-md border border-line p-4 text-xs font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 flex items-center justify-between gap-2 rounded-md border border-line p-4 text-xs font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
             >
               Terms and conditions
-            </TransitionLink>
+              <span aria-hidden className="no-underline">↗</span>
+            </a>
 
             {error && <p className="mt-4 text-sm text-primary">{error}</p>}
 

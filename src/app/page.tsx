@@ -1,6 +1,5 @@
 import HeroLive from "@/components/events/HeroLive";
 import UpcomingGrid from "@/components/events/UpcomingGrid";
-import SectionHeading from "@/components/ui/SectionHeading";
 import PastEvents from "@/components/sections/PastEvents";
 import PartnersMarquee from "@/components/sections/PartnersMarquee";
 import Offers from "@/components/sections/Offers";
@@ -17,8 +16,8 @@ export default async function HomePage() {
       <HeroLive />
 
       {/* upcoming + ongoing events — live from the box office */}
-      <section id="events" className="mx-auto max-w-7xl scroll-mt-24 px-5 py-20 md:px-8 md:py-28">
-        <SectionHeading
+      <section id="events" className="mx-auto max-w-7xl scroll-mt-24 px-5 py-12 md:px-8 md:py-16">
+        <UpcomingGrid
           label="On the calendar"
           title={
             <>
@@ -28,7 +27,6 @@ export default async function HomePage() {
             </>
           }
         />
-        <UpcomingGrid />
       </section>
 
       <PastEvents events={past} />

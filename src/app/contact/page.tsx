@@ -20,6 +20,18 @@ export default function ContactPage() {
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
   const [error, setError] = useState("");
 
+  // prefill the subject when arriving from an offer card (?offer=…)
+  useEffect(() => {
+    const offer = new URLSearchParams(window.location.search).get("offer");
+    if (offer) {
+      setForm((f) => ({
+        ...f,
+        subject: f.subject || `Offer enquiry — ${offer}`,
+        message: f.message || `Hi 2BHK team, I'd like to know more about the "${offer}" offer.`,
+      }));
+    }
+  }, []);
+
   // prefill for signed-in members (only fields they haven't typed in)
   useEffect(() => {
     if (!user) return;
