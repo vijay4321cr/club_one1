@@ -112,7 +112,7 @@ export default function AccountPage() {
     return (
       <div className="mx-auto flex min-h-svh max-w-md flex-col items-start justify-center px-5 py-28">
         <p className="label mb-3">My account</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Members
           <br />
           only<span className="text-primary">.</span>
@@ -131,7 +131,7 @@ export default function AccountPage() {
     <div className="mx-auto max-w-5xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <p className="label mb-3">My account</p>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Hey, {user.fullname.split(" ")[0]}
           <span className="text-primary">.</span>
         </h1>

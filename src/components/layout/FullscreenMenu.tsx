@@ -129,18 +129,24 @@ export default function FullscreenMenu({ open, onClose }: Props) {
         data-lenis-prevent
         className="flex flex-1 flex-col justify-between overflow-y-auto px-5 pb-8 md:flex-row md:items-end md:px-8 md:pb-12"
       >
-        {/* nav links */}
-        <nav className="flex flex-col gap-1 pt-6 md:gap-2">
+        {/* nav links — divided rows with generous tap area on mobile */}
+        <nav className="flex flex-col pt-2 md:gap-2 md:pt-6">
           {links.map((l) => (
-            <div key={l.href} className="overflow-hidden">
+            <div
+              key={l.href}
+              className="overflow-hidden border-b border-line/50 md:border-0"
+            >
               <TransitionLink
                 href={l.href}
                 onNavigate={onClose}
-                className="menu-link group flex items-baseline gap-3 md:gap-5"
+                className="menu-link group flex items-center gap-4 py-3 md:items-baseline md:gap-5 md:py-0"
               >
-                <span className="label !text-primary">{l.n}</span>
-                <span className="h-display text-[13vw] leading-[1.05] text-cream transition-colors duration-300 group-hover:text-primary sm:text-5xl md:text-7xl lg:text-8xl">
+                <span className="label w-5 shrink-0 !text-primary">{l.n}</span>
+                <span className="h-display text-[10.5vw] leading-none text-cream transition-colors duration-300 group-hover:text-primary sm:text-5xl md:text-7xl lg:text-8xl">
                   {l.label}
+                </span>
+                <span className="ml-auto text-lg text-muted transition-all duration-300 group-hover:translate-x-1 group-hover:text-primary md:hidden">
+                  →
                 </span>
               </TransitionLink>
             </div>

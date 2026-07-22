@@ -35,7 +35,7 @@ export default function ServicesPage() {
     <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <Reveal>
         <p className="label mb-3">Our services</p>
-        <h1 className="h-display max-w-3xl text-4xl sm:text-5xl md:text-7xl">
+        <h1 className="h-display !normal-case max-w-3xl text-4xl sm:text-5xl md:text-7xl">
           Everything the night needs
           <span className="text-primary">.</span>
         </h1>

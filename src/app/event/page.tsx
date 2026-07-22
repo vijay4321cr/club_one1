@@ -11,7 +11,7 @@ export default function EventsPage() {
       <Reveal>
         <div className="border-b border-line pb-6">
           <p className="label mb-3">Box office</p>
-          <h1 className="h-display text-4xl sm:text-5xl md:text-7xl">
+          <h1 className="h-display !normal-case text-4xl sm:text-5xl md:text-7xl">
             All
             <br />
             Events

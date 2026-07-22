@@ -17,7 +17,7 @@ export default function LegalPage({ label, title, updated, sections }: Props) {
     <div className="mx-auto max-w-3xl px-5 pb-20 pt-28 md:pt-36">
       <Reveal>
         <p className="label mb-3">{label}</p>
-        <h1 className="h-display text-4xl md:text-5xl">{title}</h1>
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">{title}</h1>
         <p className="mt-4 font-serif italic text-muted">Last updated — {updated}</p>
       </Reveal>
       <div className="mt-12 space-y-10">

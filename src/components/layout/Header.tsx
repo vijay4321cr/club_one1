@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import TransitionLink from "@/components/ui/TransitionLink";
 import FullscreenMenu from "@/components/layout/FullscreenMenu";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const isHome = pathname === "/";
+
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/");
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -25,18 +34,33 @@ export default function Header() {
         }`}
       >
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 md:px-8">
-          <button
-            onClick={() => setMenuOpen(true)}
-            aria-label="Open menu"
-            className="group flex items-center gap-3 text-cream"
-          >
-            <span className="flex h-4 w-6 flex-col justify-between">
-              <span className="h-px w-full bg-current transition-transform duration-300 group-hover:scale-x-75 origin-left" />
-              <span className="h-px w-full bg-current" />
-              <span className="h-px w-full bg-current transition-transform duration-300 group-hover:scale-x-75 origin-right" />
-            </span>
-            <span className="label hidden !text-cream sm:block">Menu</span>
-          </button>
+          <div className="flex items-center gap-3 sm:gap-5">
+            <button
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open menu"
+              className="group flex items-center gap-3 text-cream"
+            >
+              <span className="flex h-4 w-6 flex-col justify-between">
+                <span className="h-px w-full bg-current transition-transform duration-300 group-hover:scale-x-75 origin-left" />
+                <span className="h-px w-full bg-current" />
+                <span className="h-px w-full bg-current transition-transform duration-300 group-hover:scale-x-75 origin-right" />
+              </span>
+              <span className="label hidden !text-cream sm:block">Menu</span>
+            </button>
+
+            {!isHome && (
+              <button
+                onClick={goBack}
+                aria-label="Go back"
+                className="group flex items-center gap-1.5 text-cream transition-colors hover:text-primary"
+              >
+                <span className="text-base leading-none transition-transform duration-300 group-hover:-translate-x-0.5">
+                  ←
+                </span>
+                <span className="label !text-cream group-hover:!text-primary">Back</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <TransitionLink href="/account" className="label hidden !text-cream transition-colors hover:!text-primary md:block">

@@ -60,7 +60,7 @@ export default function GuestTicketView() {
     return (
       <div className="mx-auto flex min-h-svh max-w-md flex-col items-start justify-center px-5 py-28">
         <p className="label mb-3">Your ticket</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Link expired<span className="text-primary">.</span>
         </h1>
         <p className="mt-4 text-sm leading-relaxed text-muted">{error}</p>
@@ -76,7 +76,7 @@ export default function GuestTicketView() {
   return (
     <div className="mx-auto max-w-3xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <p className="label mb-3">Your tickets</p>
-      <h1 className="h-display text-4xl md:text-5xl">{title}</h1>
+      <h1 className="h-display !normal-case text-4xl md:text-5xl">{title}</h1>
       <p className="mt-3 text-sm text-muted">
         {tickets.length > 1
           ? `${tickets.length} tickets — tap each for its entry QR.`

@@ -52,7 +52,7 @@ export default function TicketLookup() {
     return (
       <div className="mx-auto flex min-h-svh max-w-md flex-col items-start justify-center px-5 py-28">
         <p className="label mb-3">Your ticket</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Missing booking ref<span className="text-primary">.</span>
         </h1>
         <p className="mt-4 text-sm text-muted">
@@ -71,7 +71,7 @@ export default function TicketLookup() {
     return (
       <div className="mx-auto flex min-h-svh max-w-md flex-col items-start justify-center px-5 py-28">
         <p className="label mb-3">Your ticket · {ref}</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Almost there<span className="text-primary">.</span>
         </h1>
         <p className="mt-4 text-sm text-muted">
@@ -104,7 +104,7 @@ export default function TicketLookup() {
     return (
       <div className="mx-auto flex min-h-svh max-w-md flex-col items-start justify-center px-5 py-28">
         <p className="label mb-3">Your ticket · {ref}</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Not found<span className="text-primary">.</span>
         </h1>
         <p className="mt-4 text-sm text-muted">
@@ -122,7 +122,7 @@ export default function TicketLookup() {
   return (
     <div className="mx-auto max-w-3xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <p className="label mb-3">Your ticket</p>
-      <h1 className="h-display text-4xl md:text-5xl">
+      <h1 className="h-display !normal-case text-4xl md:text-5xl">
         {ref}
         <span className="text-primary">.</span>
       </h1>

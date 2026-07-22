@@ -245,7 +245,7 @@ export default function TableBooking() {
     return (
       <div className="mx-auto max-w-3xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
         <p className="label mb-3">Table booking</p>
-        <h1 className="h-display text-4xl md:text-5xl">
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">
           Pick an event first<span className="text-primary">.</span>
         </h1>
         <Button href="/event" className="mt-8">
@@ -261,7 +261,7 @@ export default function TableBooking() {
     return (
       <div className="mx-auto max-w-2xl px-5 pb-20 pt-28 text-center md:pt-36">
         <p className="label mb-3 !text-primary">Table confirmed</p>
-        <h1 className="h-display text-4xl md:text-5xl">Your table&apos;s locked in.</h1>
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">Your table&apos;s locked in.</h1>
         <p className="mt-3 text-sm text-muted">
           {event?.title} · {partySize} guests · Ref{" "}
           <span className="text-cream">{bookingRef}</span>
@@ -335,7 +335,7 @@ export default function TableBooking() {
         </p>
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
           <div>
-            <h1 className="h-display text-3xl sm:text-4xl md:text-5xl">Book a table</h1>
+            <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
             {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
           </div>
           {/* service night picker */}

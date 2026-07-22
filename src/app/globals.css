@@ -101,8 +101,8 @@ body {
   display: none;
 }
 
-/* 3D gallery: horizontal drag spins the ring, vertical touch still scrolls */
-.gallery3d canvas {
+/* 3D ring: horizontal drag spins the ring, vertical touch still scrolls */
+.ring3d canvas {
   touch-action: pan-y;
 }
 

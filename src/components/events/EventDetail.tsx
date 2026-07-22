@@ -46,7 +46,7 @@ export default function EventDetail() {
       <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
         <Reveal>
           <p className="label mb-3">Box office</p>
-          <h1 className="h-display text-4xl sm:text-5xl md:text-6xl">
+          <h1 className="h-display !normal-case text-4xl sm:text-5xl md:text-6xl">
             That night isn&apos;t on sale<span className="text-primary">.</span>
           </h1>
           <p className="mt-4 max-w-md text-sm text-muted">
@@ -81,7 +81,7 @@ export default function EventDetail() {
               {genre ? ` · ${genre}` : ""}
               {language ? ` · ${language}` : ""}
             </p>
-            <h1 className="h-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl">
+            <h1 className="h-display !normal-case text-4xl sm:text-5xl md:text-6xl lg:text-7xl">
               {event.title}
             </h1>
             <p className="mt-5 font-serif text-lg italic text-cream/80 md:text-xl">

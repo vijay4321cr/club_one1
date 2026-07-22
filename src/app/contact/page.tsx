@@ -49,7 +49,7 @@ export default function ContactPage() {
     <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <Reveal>
         <p className="label mb-3">Contact us</p>
-        <h1 className="h-display text-4xl sm:text-5xl md:text-7xl">
+        <h1 className="h-display !normal-case text-4xl sm:text-5xl md:text-7xl">
           Say hello<span className="text-primary">.</span>
         </h1>
       </Reveal>

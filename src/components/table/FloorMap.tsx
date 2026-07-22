@@ -49,8 +49,9 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     return `translate(${tx}%, ${ty}%) scale(${zoomScale})`;
   })();
 
-  // counter-scale pins so they stay a constant on-screen size at any zoom
-  const pinScale = 1 / zoomScale;
+  // counter-scale pins so they stay a constant on-screen size at any zoom,
+  // but clamp so they never get too tiny to tap when zoomed in
+  const pinScale = Math.max(0.5, 1 / zoomScale);
 
   const spots: (TableSpot & { isZone?: boolean })[] = zone
     ? zone.tables && zone.tables.length > 0
@@ -73,7 +74,12 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
         </span>
       </div>
 
-      <div className="relative overflow-hidden rounded-sm bg-coal">
+      {/* touch-action: manipulation stops the browser's double-tap-to-zoom
+          from firing on the map and snapping the viewport ("zoom out") */}
+      <div
+        className="relative overflow-hidden rounded-sm bg-coal [touch-action:manipulation]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* zoom-out control — prominent light pill */}
         {zone && (
           <button
@@ -132,7 +138,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                       onToggle(s as TableZone, s);
                     }
                   }}
-                  className="group absolute"
+                  className="group absolute p-2"
                   style={{
                     left: `${s.hotspot.x * 100}%`,
                     top: `${s.hotspot.y * 100}%`,

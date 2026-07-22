@@ -80,7 +80,7 @@ function LoginFlow() {
   return (
     <div className="mx-auto flex min-h-svh max-w-md flex-col justify-center px-5 py-28">
       <p className="label mb-3">Members</p>
-      <h1 className="h-display text-4xl md:text-5xl">
+      <h1 className="h-display !normal-case text-4xl md:text-5xl">
         {step === "otp" ? (
           <>
             Check your
