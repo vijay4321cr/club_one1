@@ -6,7 +6,7 @@ import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import QrSlider from "@/components/account/QrSlider";
-import { bookingSlides } from "@/components/account/TicketModal";
+import { bookingSlides, bookingGroups } from "@/components/account/TicketModal";
 import { authFetch, ApiError } from "@/lib/auth";
 import { getAllTicketDetails } from "@/lib/api";
 import { openCheckout } from "@/lib/payment";
@@ -330,7 +330,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
           <div className="mx-auto mt-8 max-w-sm">
             {slides.length > 0 ? (
               <QrSlider
-                slides={slides}
+                groups={bookingGroups(successTickets ?? [])}
                 codeLabel="Ticket code"
                 unit="Pass"
                 footnote="Show this at the gate — also saved in My Account"

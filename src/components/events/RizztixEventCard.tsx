@@ -12,7 +12,7 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
   const genre = event.genre?.[0]?.title;
 
   return (
-    <article className="group flex flex-col">
+    <article className="group flex h-full flex-col">
       <TransitionLink
         href={`/event/view?id=${event._id}&buy=1`}
         className="relative block overflow-hidden rounded-sm"

@@ -130,7 +130,12 @@ export default function UpcomingGrid({ label, title, homeGrid }: Props) {
       ) : (
         <div className={gridClass}>
           {filtered.map((e, i) => (
-            <FxReveal key={`${e._id}-${query ? "s" : "a"}`} effect="tilt" delay={(i % 3) * 0.08}>
+            <FxReveal
+              key={`${e._id}-${query ? "s" : "a"}`}
+              effect="tilt"
+              delay={(i % 3) * 0.08}
+              className="h-full"
+            >
               <RizztixEventCard event={e} />
             </FxReveal>
           ))}

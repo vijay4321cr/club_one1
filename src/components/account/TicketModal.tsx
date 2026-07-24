@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import gsap from "gsap";
-import QrSlider, { type QrSlide } from "@/components/account/QrSlider";
+import QrSlider, { type QrSlide, type QrGroup } from "@/components/account/QrSlider";
 import { inr, eventDateLong } from "@/lib/format";
 import type { RizztixTicketDetail, RizztixPassQr } from "@/types";
 
@@ -89,6 +89,32 @@ export function bookingSlides(tickets: RizztixTicketDetail[]): QrSlide[] {
   );
 }
 
+/**
+ * The booking's passes split by ticket category (VIP, Couple Entry, …) so the
+ * QR slider can show a tab per category — otherwise you can't tell which QR
+ * belongs to which pass type.
+ */
+export function bookingGroups(tickets: RizztixTicketDetail[]): QrGroup[] {
+  const map = new Map<string, QrSlide[]>();
+  const order: string[] = [];
+  for (const t of tickets) {
+    const label = t.tickettype ?? "Ticket";
+    if (!map.has(label)) {
+      map.set(label, []);
+      order.push(label);
+    }
+    map.get(label)!.push(
+      ...passQrs(t).map((q) => ({
+        qrstring: q.qrstring,
+        qrcode: q.qrcode,
+        qrcodeimage: q.qrcodeimage,
+        code: q.ticketId || t.ticketid || t.bookingref || "",
+      }))
+    );
+  }
+  return order.map((label) => ({ label, slides: map.get(label)! }));
+}
+
 /** distinct ticket types of a booking with summed counts */
 export function ticketTypeLines(tickets: RizztixTicketDetail[]): { type: string; count: number }[] {
   const counts = new Map<string, number>();
@@ -114,7 +140,7 @@ export default function TicketModal({ booking, onClose }: Props) {
   const tickets = booking.tickets;
   const first = tickets[0];
   const ev = first?.eventDetails;
-  const slides = bookingSlides(tickets);
+  const groups = bookingGroups(tickets);
   const lines = ticketTypeLines(tickets);
   const total = tickets.reduce((s, t) => s + (t.ticketprice ?? 0) * (t.noofticket ?? 1), 0);
 
@@ -217,7 +243,12 @@ export default function TicketModal({ booking, onClose }: Props) {
 
         {/* every pass QR across the booking */}
         <div className="tm-stagger p-5">
-          <QrSlider slides={slides} codeLabel="Ticket code" unit="Pass" footnote="Show this at the gate" />
+          <QrSlider
+            groups={groups}
+            codeLabel="Ticket code"
+            unit="Pass"
+            footnote="Show this at the gate"
+          />
         </div>
       </div>
     </div>

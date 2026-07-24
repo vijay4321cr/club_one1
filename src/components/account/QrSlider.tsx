@@ -11,8 +11,16 @@ export interface QrSlide {
   code?: string; // shown under codeLabel (e.g. ticket/guest code)
 }
 
-interface Props {
+/** one tab of QRs — e.g. all the passes of a single ticket category */
+export interface QrGroup {
+  label: string;
   slides: QrSlide[];
+}
+
+interface Props {
+  slides?: QrSlide[];
+  /** when a booking spans several ticket categories, show a tab per category */
+  groups?: QrGroup[];
   /** small caption above the code, e.g. "Ticket code" / "Guest code" */
   codeLabel?: string;
   /** singular noun for the x/N counter, e.g. "Pass" / "Guest" */
@@ -24,24 +32,58 @@ interface Props {
 /**
  * Ticket-stub QR carousel — one cream stub at a time, swipe / ← dots → to move.
  * Shared by ticket passes and table-booking guest QRs so both look identical.
+ * With `groups`, a tab row appears and the stub drops in from the active tab.
  */
 export default function QrSlider({
   slides,
+  groups,
   codeLabel = "Ticket code",
   unit = "Pass",
   footnote = "Show this at the gate",
 }: Props) {
   const [idx, setIdx] = useState(0);
+  const [tab, setTab] = useState(0);
   // falls back to the text wordmark if the light-bg logo file isn't there yet
   const [logoOk, setLogoOk] = useState(true);
   const touchX = useRef<number | null>(null);
-  const total = slides.length;
+
+  const tabs: QrGroup[] = groups?.length ? groups : [{ label: "", slides: slides ?? [] }];
+  const active = Math.min(tab, tabs.length - 1);
+  const items = tabs[active].slides;
+  const total = items.length;
   const go = (i: number) => setIdx(Math.max(0, Math.min(total - 1, i)));
 
   return (
     <div>
+      {/* category tabs — the stub appears to drop out of the one you tap */}
+      {tabs.length > 1 && (
+        <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+          {tabs.map((g, k) => (
+            <button
+              key={g.label}
+              onClick={() => {
+                setTab(k);
+                setIdx(0);
+              }}
+              className={`rounded-full px-4 py-2 text-[0.625rem] font-semibold uppercase tracking-[0.14em] transition-all duration-300 ${
+                k === active
+                  ? "bg-primary text-cream shadow-lg shadow-primary/25"
+                  : "border border-line text-muted hover:border-cream hover:text-cream"
+              }`}
+            >
+              {g.label}
+              <span className="ml-1.5 opacity-70">{g.slides.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div
-        className="overflow-hidden"
+        // re-keyed per tab so the stub re-plays its drop-in from that tab
+        key={active}
+        className="qr-drop overflow-hidden"
+        style={{
+          ["--drop-origin" as string]: `${((active + 0.5) / tabs.length) * 100}%`,
+        }}
         onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
         onTouchEnd={(e) => {
           if (touchX.current === null) return;
@@ -55,7 +97,7 @@ export default function QrSlider({
           className="flex transition-transform duration-500 ease-out"
           style={{ transform: `translateX(-${idx * 100}%)` }}
         >
-          {slides.map((s, i) => (
+          {items.map((s, i) => (
             <div
               key={s.code ?? i}
               className="flex min-w-full flex-col items-center px-2"
@@ -104,7 +146,7 @@ export default function QrSlider({
                     {/* light-background logo (red 2 + black BHK) sits directly on the stub */}
                     {logoOk ? (
                       <Image
-                        src="/logo-dark.png"
+                        src="/2bhk_alfresco.png"
                         alt="2BHK — Bar Hauté Kitchen"
                         width={56}
                         height={58}
@@ -141,7 +183,7 @@ export default function QrSlider({
             ←
           </button>
           <div className="flex items-center gap-2">
-            {slides.map((s, i) => (
+            {items.map((s, i) => (
               <button
                 key={s.code ?? i}
                 onClick={() => go(i)}

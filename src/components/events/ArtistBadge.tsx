@@ -60,7 +60,7 @@ export default function ArtistBadge({ artist, index }: Props) {
   }, [index]);
 
   const content = (
-    <div ref={ref} className="w-28 shrink-0 snap-start text-center md:w-32">
+    <div ref={ref} className="w-20 shrink-0 snap-start text-center md:w-24">
       <div className="relative mx-auto aspect-square w-full transition-transform duration-300 group-hover:scale-105">
         {/* self-drawing ring */}
         <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100" aria-hidden>
@@ -87,16 +87,18 @@ export default function ArtistBadge({ artist, index }: Props) {
         </svg>
         {/* photo */}
         <div
-          className="artist-img absolute inset-[7px] overflow-hidden rounded-full bg-surface"
+          className="artist-img absolute inset-[5px] overflow-hidden rounded-full bg-surface"
           style={{ visibility: "hidden" }}
         >
           {artist.image && (
-            <Image src={artist.image} alt={artist.name} fill sizes="128px" className="object-cover" />
+            <Image src={artist.image} alt={artist.name} fill sizes="96px" className="object-cover" />
           )}
         </div>
       </div>
-      <div className="artist-meta mt-3" style={{ visibility: "hidden" }}>
-        <p className="font-display text-sm font-medium uppercase leading-tight">{artist.name}</p>
+      <div className="artist-meta mt-2.5" style={{ visibility: "hidden" }}>
+        <p className="font-display text-xs font-medium uppercase leading-tight md:text-sm">
+          {artist.name}
+        </p>
         {artist.instagramurl && (
           <p className="label mt-1 !text-[0.5625rem] !text-muted transition-colors group-hover:!text-primary">
             Instagram ↗
