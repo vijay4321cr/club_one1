@@ -4,9 +4,9 @@ import { partners } from "@/lib/data/content";
 
 export default function PartnersMarquee() {
   return (
-    <section className="py-14 md:py-20">
+    <section className="py-10 md:py-12">
       <Reveal>
-        <p className="label mb-6 text-center">In good company — partners & collabs</p>
+        <p className="label mb-5 text-center">In Good Company — Partners &amp; Collabs</p>
       </Reveal>
       <Reveal>
         <Marquee>

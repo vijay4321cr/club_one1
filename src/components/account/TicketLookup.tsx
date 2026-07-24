@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import TicketCard from "@/components/account/TicketCard";
-import TicketModal from "@/components/account/TicketModal";
+import TicketModal, { groupTickets, type TicketBooking } from "@/components/account/TicketModal";
 import { getAllTicketDetails } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 import type { RizztixTicketDetail } from "@/types";
@@ -27,7 +27,7 @@ export default function TicketLookup() {
   const { session, loading } = useAuth();
   const [ref, setRef] = useState<string | null>(null); // null = not read yet
   const [tickets, setTickets] = useState<RizztixTicketDetail[] | null>(null);
-  const [openTicket, setOpenTicket] = useState<RizztixTicketDetail | null>(null);
+  const [openBooking, setOpenBooking] = useState<TicketBooking | null>(null);
 
   useEffect(() => {
     setRef(refFromLocation());
@@ -133,12 +133,12 @@ export default function TicketLookup() {
       </p>
 
       <div className="mt-8 space-y-3">
-        {tickets.map((t) => (
-          <TicketCard key={t._id} ticket={t} onView={setOpenTicket} />
+        {groupTickets(tickets).map((g) => (
+          <TicketCard key={g.key} booking={g} onView={setOpenBooking} />
         ))}
       </div>
 
-      {openTicket && <TicketModal ticket={openTicket} onClose={() => setOpenTicket(null)} />}
+      {openBooking && <TicketModal booking={openBooking} onClose={() => setOpenBooking(null)} />}
     </div>
   );
 }

@@ -17,6 +17,26 @@ export function scrollToTop() {
   }
 }
 
+/** Smoothly scroll to an element (or y) through Lenis — slow, cinematic easing. */
+export function smoothScrollTo(
+  target: HTMLElement | number,
+  opts: { offset?: number; duration?: number } = {}
+) {
+  const { offset = 0, duration = 2 } = opts;
+  // even, gentle glide (slow start + slow stop) rather than a fast launch
+  const easeInOutCubic = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  if (lenisInstance) {
+    lenisInstance.scrollTo(target, { offset, duration, easing: easeInOutCubic, force: true });
+  } else {
+    const y =
+      typeof target === "number"
+        ? target
+        : target.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: y + offset, behavior: "smooth" });
+  }
+}
+
 export default function LenisProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 

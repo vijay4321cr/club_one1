@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import TicketQr from "@/components/account/TicketQr";
+import QrSlider from "@/components/account/QrSlider";
 import { inr, eventDate } from "@/lib/format";
 import type { TableBooking } from "@/types";
 
@@ -17,8 +17,8 @@ interface Props {
 /** A table booking row with a guest-QR popup (styled ticket-stub slider). */
 export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }: Props) {
   const [open, setOpen] = useState(false);
-  const [idx, setIdx] = useState(0);
   const qrs = b.guestQrcodes ?? [];
+  const tableCount = b.tableCount ?? 1;
   const img = b.eventid?.image;
   const date = b.eventid?.startdatetime ?? b.serviceDate;
   const confirmed = b.status === "CONFIRMED";
@@ -38,21 +38,21 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
     <>
       <div className="flex gap-4 rounded-sm border border-line p-4 transition-colors hover:border-cream/30 sm:gap-6 sm:p-5">
         {img && (
-          <div className="relative aspect-[3/4] w-28 shrink-0 self-center overflow-hidden rounded-sm bg-surface sm:w-32">
+          <div className="relative aspect-[4/5] w-28 shrink-0 self-center overflow-hidden rounded-sm border border-cream/15 bg-surface sm:w-32">
             <Image src={img} alt="" fill sizes="128px" className="object-cover" />
           </div>
         )}
         <div className="flex min-w-0 flex-1 flex-col">
           <p className="label !text-[0.5625rem]">
             {eventDate(date)} · {b.bookingref}
-            <span className={confirmed ? "text-primary" : "text-gold"}> · {b.status}</span>
+            <span className={confirmed ? "text-green-500" : "text-gold"}> · {b.status}</span>
           </p>
           <p className="mt-1 line-clamp-2 font-display text-lg font-medium uppercase leading-tight">
             {b.eventTitle ?? b.eventid?.title ?? "2BHK event"}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-gold">
-              Table · {b.table?.tableLabel ?? b.areaLabel ?? "reserved"}
+              {tableCount > 1 ? `${tableCount} tables` : "Table"} · {b.table?.tableLabel ?? b.areaLabel ?? "reserved"}
             </span>
             <span className="rounded-full border border-line px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em]">
               {b.partySize} pax
@@ -65,10 +65,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
           <div className="mt-auto pt-4">
             {confirmed && qrs.length > 0 ? (
               <button
-                onClick={() => {
-                  setIdx(0);
-                  setQrOpen(true);
-                }}
+                onClick={() => setQrOpen(true)}
                 className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
               >
                 View entry QR{qrs.length > 1 ? `s (${qrs.length})` : ""}
@@ -89,53 +86,35 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
         >
           <div
             data-lenis-prevent
-            className="w-full max-w-sm rounded-md border border-line bg-surface p-5"
+            className="w-full max-w-md rounded-md border border-line bg-surface p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between">
-              <p className="font-display text-lg font-semibold uppercase">{b.bookingref}</p>
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="truncate font-display text-lg font-semibold uppercase">{b.bookingref}</p>
+                <p className="label !text-[0.5625rem] !text-muted">
+                  {qrs.length} guest QR{qrs.length > 1 ? "s · swipe to see all" : ""}
+                </p>
+              </div>
               <button
                 onClick={() => setQrOpen(false)}
                 aria-label="Close"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mx-auto w-full max-w-[16rem] overflow-hidden rounded-lg bg-cream text-coal">
-              <div className="p-5">
-                <TicketQr
-                  qrstring={qrs[idx]?.qrstring}
-                  qrcodeimage={qrs[idx]?.qrcodeimage}
-                  className="mx-auto h-44 w-44"
-                />
-              </div>
-              <div className="flex items-center justify-between border-t-2 border-dashed border-coal/20 px-5 py-3">
-                <span className="text-[0.5625rem] font-semibold uppercase tracking-[0.2em] text-coal/50">
-                  Guest {qrs[idx]?.guestIndex} of {qrs.length}
-                </span>
-                <span className="font-display text-base font-bold uppercase">
-                  <span className="text-primary">2</span>BHK
-                </span>
-              </div>
-            </div>
-
-            {qrs.length > 1 && (
-              <div className="mt-4 flex items-center justify-center gap-2">
-                {qrs.map((q, i) => (
-                  <button
-                    key={q.guestIndex}
-                    onClick={() => setIdx(i)}
-                    aria-label={`Guest ${i + 1}`}
-                    className={`h-2 rounded-full transition-all ${
-                      i === idx ? "w-6 bg-primary" : "w-2 bg-line hover:bg-cream/40"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-            <p className="label mt-4 text-center !text-[0.5625rem]">One QR per guest — show at the door</p>
+            <QrSlider
+              slides={qrs.map((q) => ({
+                qrstring: q.qrstring,
+                qrcodeimage: q.qrcodeimage,
+                code: q.guestRef || `Guest ${q.guestIndex}`,
+              }))}
+              codeLabel="Guest code"
+              unit="Guest"
+              footnote="One QR per guest — show at the door"
+            />
           </div>
         </div>
       )}

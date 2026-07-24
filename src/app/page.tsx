@@ -18,6 +18,7 @@ export default async function HomePage() {
       {/* upcoming + ongoing events — live from the box office */}
       <section id="events" className="mx-auto max-w-7xl scroll-mt-24 px-5 py-12 md:px-8 md:py-16">
         <UpcomingGrid
+          homeGrid
           label="On the calendar"
           title={
             <>

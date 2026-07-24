@@ -336,6 +336,8 @@ export interface TableBooking {
   eventTitle?: string;
   areaLabel?: string;
   areaId?: string;
+  areaIds?: string[]; // present on the combined parent of a multi-table booking
+  tableCount?: number; // how many tables this (grouped) booking covers
   table?: { zoneLabel?: string; tableLabel?: string; displayLabel?: string };
   qrcodeimage?: string;
   guestQrcodes?: TableGuestQr[];

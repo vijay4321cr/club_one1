@@ -2,17 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
-import { Input, Textarea } from "@/components/ui/Input";
-import TicketModal from "@/components/account/TicketModal";
+import TicketModal, { groupTickets, type TicketBooking } from "@/components/account/TicketModal";
 import TicketCard from "@/components/account/TicketCard";
 import TableBookingCard from "@/components/account/TableBookingCard";
 import { logout, ApiError } from "@/lib/auth";
-import { sendFeedback, getAllTicketDetails } from "@/lib/api";
+import { getAllTicketDetails } from "@/lib/api";
 import { getMyTableBookings } from "@/lib/tableApi";
 import { useAuth } from "@/lib/useAuth";
 import type { RizztixTicketDetail, TableBooking } from "@/types";
 
-type Tab = "tickets" | "tables" | "profile" | "feedback";
+type Tab = "tickets" | "tables" | "profile";
 
 /** display "+91 XXXXXXXXXX" without doubling a country code the API included */
 function displayPhone(phone: string) {
@@ -33,9 +32,7 @@ export default function AccountPage() {
   const [tab, setTab] = useState<Tab>("tickets");
   const [tickets, setTickets] = useState<RizztixTicketDetail[] | null>(null);
   const [error, setError] = useState("");
-  const [feedback, setFeedback] = useState({ title: "", description: "" });
-  const [feedbackState, setFeedbackState] = useState<"idle" | "busy" | "done" | "error">("idle");
-  const [openTicket, setOpenTicket] = useState<RizztixTicketDetail | null>(null);
+  const [openBooking, setOpenBooking] = useState<TicketBooking | null>(null);
   const [tables, setTables] = useState<TableBooking[] | null>(null);
   // deep-link: which order's QR to reveal, from ?order= (read once on mount)
   const [orderParam, setOrderParam] = useState<string | null>(null);
@@ -51,12 +48,12 @@ export default function AccountPage() {
     window.history.replaceState(null, "", url);
   };
 
-  const viewTicket = (t: RizztixTicketDetail) => {
-    setOpenTicket(t);
-    if (t.orderid) syncUrl(t.orderid);
+  const viewBooking = (b: TicketBooking) => {
+    setOpenBooking(b);
+    if (b.orderid) syncUrl(b.orderid);
   };
-  const closeTicket = () => {
-    setOpenTicket(null);
+  const closeBooking = () => {
+    setOpenBooking(null);
     syncUrl(null);
   };
 
@@ -93,10 +90,12 @@ export default function AccountPage() {
   // once data is in, open the QR named by ?order= (tickets first, then tables)
   useEffect(() => {
     if (autoOpened || !orderParam || tickets === null || tables === null) return;
-    const ticket = tickets.find((t) => t.orderid === orderParam);
-    if (ticket) {
+    const group = groupTickets(tickets).find(
+      (g) => g.orderid === orderParam || g.tickets.some((t) => t.orderid === orderParam)
+    );
+    if (group) {
       setTab("tickets");
-      setOpenTicket(ticket);
+      setOpenBooking(group);
       setAutoOpened(true);
       return;
     }
@@ -150,7 +149,6 @@ export default function AccountPage() {
             ["tickets", "Ticket bookings"],
             ["tables", "Table bookings"],
             ["profile", "Profile"],
-            ["feedback", "Feedback"],
           ] as [Tab, string][]
         ).map(([t, label]) => (
           <button
@@ -180,8 +178,8 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {tickets.map((t) => (
-                <TicketCard key={t._id} ticket={t} onView={viewTicket} />
+              {groupTickets(tickets).map((g) => (
+                <TicketCard key={g.key} booking={g} onView={viewBooking} />
               ))}
             </div>
           )}
@@ -214,55 +212,6 @@ export default function AccountPage() {
         </div>
       )}
 
-      {tab === "feedback" && (
-        <div className="mt-8 max-w-md">
-          {feedbackState === "done" ? (
-            <div className="rounded-sm border border-line p-8 text-center">
-              <p className="h-display text-2xl">Thank you ✓</p>
-              <p className="mt-3 text-sm text-muted">
-                Your feedback landed with the team — it genuinely shapes the next night.
-              </p>
-            </div>
-          ) : (
-            <form
-              className="space-y-6"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (feedbackState === "busy") return;
-                setFeedbackState("busy");
-                try {
-                  await sendFeedback(feedback.title, feedback.description);
-                  setFeedbackState("done");
-                } catch {
-                  setFeedbackState("error");
-                }
-              }}
-            >
-              <Input
-                label="Title"
-                required
-                value={feedback.title}
-                onChange={(e) => setFeedback({ ...feedback, title: e.target.value })}
-                placeholder="Great night"
-              />
-              <Textarea
-                label="Your feedback"
-                required
-                value={feedback.description}
-                onChange={(e) => setFeedback({ ...feedback, description: e.target.value })}
-                placeholder="Loved the vibe…"
-              />
-              <Button type="submit" disabled={feedbackState === "busy"}>
-                {feedbackState === "busy" ? "Sending…" : "Send feedback"}
-              </Button>
-              {feedbackState === "error" && (
-                <p className="text-sm text-primary">Could not send — please try again.</p>
-              )}
-            </form>
-          )}
-        </div>
-      )}
-
       {tab === "profile" && (
         <div className="mt-8 max-w-md space-y-6">
           <div>
@@ -288,7 +237,7 @@ export default function AccountPage() {
       )}
 
       {/* QR / ticket-detail popup */}
-      {openTicket && <TicketModal ticket={openTicket} onClose={closeTicket} />}
+      {openBooking && <TicketModal booking={openBooking} onClose={closeBooking} />}
     </div>
   );
 }

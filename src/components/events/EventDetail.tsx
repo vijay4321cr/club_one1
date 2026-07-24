@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
@@ -10,6 +10,7 @@ import TransitionLink from "@/components/ui/TransitionLink";
 import TicketPurchase from "@/components/events/TicketPurchase";
 import ArtistBadge from "@/components/events/ArtistBadge";
 import UpcomingGrid from "@/components/events/UpcomingGrid";
+import { smoothScrollTo } from "@/components/layout/LenisProvider";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
 import { eventDateLong } from "@/lib/format";
 
@@ -17,12 +18,27 @@ import { eventDateLong } from "@/lib/format";
 export default function EventDetail() {
   const params = useSearchParams();
   const id = params.get("id") ?? "";
+  const buy = params.get("buy"); // "1" → arrived from an event click → glide to tickets
   const data = useUpcomingEvents();
   const event = data?.events.find((e) => e._id === id);
+  const ticketsRef = useRef<HTMLDivElement>(null);
+  const glided = useRef(false);
 
   useEffect(() => {
     if (event) document.title = `${event.title} — 2BHK`;
   }, [event]);
+
+  // arriving from an event card → let the hero settle, then slowly glide down
+  // to the tickets section and stop there. Clear the marker so it fires once.
+  useEffect(() => {
+    if (!event || buy !== "1" || glided.current) return;
+    glided.current = true;
+    const t = window.setTimeout(() => {
+      if (ticketsRef.current) smoothScrollTo(ticketsRef.current, { offset: -96, duration: 2.4 });
+      window.history.replaceState(null, "", `/event/view?id=${id}`);
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [event, buy, id]);
 
   /* loading */
   if (data === null) {
@@ -34,7 +50,7 @@ export default function EventDetail() {
             <div className="mt-4 h-14 w-3/4 rounded-sm bg-surface" />
             <div className="mt-4 h-5 w-1/2 rounded-sm bg-surface" />
           </div>
-          <div className="aspect-[4/5] w-full rounded-sm bg-surface md:aspect-[4/3]" />
+          <div className="aspect-[4/5] w-full rounded-sm bg-surface" />
         </div>
       </div>
     );
@@ -96,7 +112,7 @@ export default function EventDetail() {
             )}
           </div>
           <FxReveal effect="burn" className="overflow-hidden rounded-sm">
-            <div className="relative aspect-[4/5] w-full bg-surface md:aspect-[4/3]">
+            <div className="relative aspect-[4/5] w-full border border-cream/15 bg-surface">
               <Image
                 src={event.image}
                 alt={`${event.title} poster`}
@@ -125,7 +141,7 @@ export default function EventDetail() {
       )}
 
       {/* tickets — full on-site purchase (login → pay → confirm) */}
-      <section className="mt-14 md:mt-20">
+      <section ref={ticketsRef} id="tickets" className="scroll-mt-24 mt-14 md:mt-20">
         <TicketPurchase event={event} />
       </section>
     </div>

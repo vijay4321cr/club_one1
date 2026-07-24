@@ -162,7 +162,7 @@ export default function FullscreenMenu({ open, onClose }: Props) {
               className="menu-meta group block"
             >
               <p className="label mb-3">{nextEvent.isLive ? "Happening now" : "Next up"}</p>
-              <div className="relative mb-3 aspect-[4/3] w-full overflow-hidden rounded-sm bg-surface transition-transform duration-500 group-hover:scale-[1.02]">
+              <div className="relative mb-3 aspect-[4/5] w-full overflow-hidden rounded-sm border border-cream/15 bg-surface transition-transform duration-500 group-hover:scale-[1.02]">
                 <Image
                   src={nextEvent.image}
                   alt={`${nextEvent.title} poster`}

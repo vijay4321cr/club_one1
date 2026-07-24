@@ -20,9 +20,9 @@ export default function PastEvents({ events }: { events: ClubEvent[] }) {
       {/* 3D spinning ring of past-event posters (drag to spin) */}
       <Ring3D items={ringItems} />
 
-      {/* artists who performed — wipes in from the left */}
-      <FxReveal effect="wipe" className="mt-10 md:mt-12">
-        <p className="label mb-5">Artists Who Performed</p>
+      {/* artists who performed */}
+      <FxReveal effect="wipe" className="mt-8 md:mt-10">
+        <p className="label mb-4 text-center">Artists Who Performed</p>
       </FxReveal>
       <FxReveal effect="wipe" delay={0.15}>
         <Marquee className="border-y border-line py-5">

@@ -6,6 +6,7 @@ import LenisProvider from "@/components/layout/LenisProvider";
 import PageTransition from "@/components/layout/PageTransition";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
+import PageLoader from "@/components/layout/PageLoader";
 import AgeGate from "@/components/overlays/AgeGate";
 import CookieBanner from "@/components/overlays/CookieBanner";
 
@@ -144,6 +145,7 @@ export default function RootLayout({
         </LenisProvider>
         <AgeGate />
         <CookieBanner />
+        <PageLoader />
       </body>
     </html>
   );

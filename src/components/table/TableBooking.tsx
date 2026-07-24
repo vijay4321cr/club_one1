@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import FloorMap from "@/components/table/FloorMap";
-import StyledQr from "@/components/account/StyledQr";
+import BrandLoader from "@/components/layout/BrandLoader";
+import QrSlider from "@/components/account/QrSlider";
 import { useAuth } from "@/lib/useAuth";
 import { ApiError } from "@/lib/auth";
 import { openCheckout } from "@/lib/payment";
@@ -16,6 +16,7 @@ import {
   getTableLayouts,
   initTableBooking,
   confirmTableBooking,
+  getMyTableBookings,
 } from "@/lib/tableApi";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
 import { inr, inrExact } from "@/lib/format";
@@ -24,7 +25,7 @@ import type { TableLayout, TableZone, TableSpot, TableGuestQr } from "@/types";
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-type Phase = "map" | "details" | "paying" | "done";
+type Phase = "map" | "details" | "paying" | "confirming" | "done";
 
 export default function TableBooking() {
   const params = useSearchParams();
@@ -42,18 +43,20 @@ export default function TableBooking() {
   const [clubId, setClubId] = useState<string | undefined>();
   const [loadingMap, setLoadingMap] = useState(false);
   const [mapError, setMapError] = useState("");
+  const [mapReady, setMapReady] = useState(false); // scene image decoded
 
   // one or more tables, each with its own party size
   const [selected, setSelected] = useState<
     { zone: TableZone; table: TableSpot; pax: number }[]
   >([]);
   const [showModal, setShowModal] = useState(false);
+  const [showFeeBreakdown, setShowFeeBreakdown] = useState(false);
   const [phase, setPhase] = useState<Phase>("map");
   const [men, setMen] = useState(0); // women = total − men
   const [error, setError] = useState("");
   const [guestQrs, setGuestQrs] = useState<TableGuestQr[] | null>(null);
   const [bookingRef, setBookingRef] = useState("");
-  const [qrIdx, setQrIdx] = useState(0);
+  const [orderId, setOrderId] = useState("");
 
   // lock page scroll while the booking sheet is open
   useEffect(() => {
@@ -62,6 +65,23 @@ export default function TableBooking() {
       document.body.style.overflow = "";
     };
   }, [showModal]);
+
+  // preload + decode the floor image so we hold the branded loader (no black flash)
+  useEffect(() => {
+    setMapReady(false);
+    const url = layout?.sceneimageurl;
+    if (!url) return;
+    let cancelled = false;
+    const img = new window.Image();
+    const done = () => !cancelled && setMapReady(true);
+    img.onload = done;
+    img.onerror = done; // never hang the page on a bad image
+    img.src = url;
+    if (img.complete) done();
+    return () => {
+      cancelled = true;
+    };
+  }, [layout?.sceneimageurl]);
 
   // pick the default service date once events resolve
   useEffect(() => {
@@ -118,11 +138,15 @@ export default function TableBooking() {
     selected.every((x) => x.pax >= x.table.minPartySize && x.pax <= x.table.maxPartySize);
 
   const toggleTable = (zone: TableZone, table: TableSpot) => {
-    setSelected((prev) =>
-      prev.some((x) => x.table._id === table._id)
-        ? prev.filter((x) => x.table._id !== table._id)
-        : [...prev, { zone, table, pax: Math.max(1, table.minPartySize) }]
-    );
+    setSelected((prev) => {
+      // deselect if already picked
+      if (prev.some((x) => x.table._id === table._id)) {
+        return prev.filter((x) => x.table._id !== table._id);
+      }
+      // multi-table booking is limited to a single zone — block other zones
+      if (prev.length && prev[0].zone._id !== zone._id) return prev;
+      return [...prev, { zone, table, pax: Math.max(1, table.minPartySize) }];
+    });
   };
   const setPax = (id: string, pax: number) =>
     setSelected((prev) => prev.map((x) => (x.table._id === id ? { ...x, pax: Math.max(1, pax) } : x)));
@@ -190,6 +214,7 @@ export default function TableBooking() {
 
       // payment fields nest inside `booking` (real HAR), unlike ticket /order/buy
       const b = init.booking;
+      setOrderId(b.orderid);
       const result = await openCheckout(
         {
           orderid: b.orderid,
@@ -219,6 +244,10 @@ export default function TableBooking() {
         return;
       }
 
+      // payment done — close the sheet and show the confirming screen
+      setShowModal(false);
+      setPhase("confirming");
+
       const { booking } = await confirmTableBooking({
         bookingId: init.booking._id,
         eventId,
@@ -236,9 +265,35 @@ export default function TableBooking() {
       setError(
         e instanceof ApiError ? e.message : "Could not complete the booking — please try again."
       );
+      // reopen the sheet so the error is visible and retryable
       setPhase("details");
+      setShowModal(true);
     }
   };
+
+  // on success, keep fetching until every guest QR is minted (they generate
+  // async, so the confirm response often carries only the first one)
+  useEffect(() => {
+    if (phase !== "done" || !orderId) return;
+    let cancelled = false;
+    (async () => {
+      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+        try {
+          const mine = await getMyTableBookings();
+          const match = mine.find((b) => b.orderid === orderId);
+          const qrs = match?.guestQrcodes ?? [];
+          if (qrs.length && !cancelled) setGuestQrs(qrs);
+          if (qrs.length >= (match?.partySize ?? partySize)) return; // all present
+        } catch {
+          /* ignore and retry */
+        }
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, orderId, partySize]);
 
   /* ---------- no event ---------- */
   if (eventsData && !event) {
@@ -255,6 +310,22 @@ export default function TableBooking() {
     );
   }
 
+  /* ---------- confirming payment ---------- */
+  if (phase === "confirming") {
+    return (
+      <div className="mx-auto max-w-2xl px-5 pb-20 pt-28 text-center md:pt-36">
+        <p className="label mb-3 flex items-center justify-center gap-2 !text-primary">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+          Payment received
+        </p>
+        <h1 className="h-display !normal-case text-4xl md:text-5xl">Confirming your table…</h1>
+        <p className="mt-3 text-sm text-muted">
+          Hold on a second — locking in your table. Don&apos;t close this page.
+        </p>
+      </div>
+    );
+  }
+
   /* ---------- success ---------- */
   if (phase === "done") {
     const qrs = guestQrs ?? [];
@@ -267,49 +338,17 @@ export default function TableBooking() {
           <span className="text-cream">{bookingRef}</span>
         </p>
         {qrs.length > 0 && (
-          <div className="mt-8">
-            <div className="mx-auto w-64 overflow-hidden rounded-lg bg-cream text-coal">
-              <div className="p-5">
-                {qrs[qrIdx]?.qrstring ? (
-                  <StyledQr data={qrs[qrIdx].qrstring!} className="mx-auto h-44 w-44" />
-                ) : qrs[qrIdx]?.qrcodeimage ? (
-                  <div className="relative mx-auto h-44 w-44">
-                    <Image
-                      src={qrs[qrIdx].qrcodeimage!}
-                      alt="Entry QR"
-                      fill
-                      sizes="176px"
-                      className="object-contain"
-                    />
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex items-center justify-between border-t-2 border-dashed border-coal/20 px-5 py-3">
-                <span className="text-[0.5625rem] font-semibold uppercase tracking-[0.2em] text-coal/50">
-                  Guest {qrs[qrIdx]?.guestIndex}
-                </span>
-                <span className="font-display text-base font-bold uppercase">
-                  <span className="text-primary">2</span>BHK
-                </span>
-              </div>
-            </div>
-            {qrs.length > 1 && (
-              <div className="mt-4 flex items-center justify-center gap-2">
-                {qrs.map((q, i) => (
-                  <button
-                    key={q.guestIndex}
-                    onClick={() => setQrIdx(i)}
-                    aria-label={`Guest ${i + 1}`}
-                    className={`h-2 rounded-full transition-all ${
-                      i === qrIdx ? "w-6 bg-primary" : "w-2 bg-line"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-            <p className="label mt-4">
-              {qrs.length} guest QR{qrs.length > 1 ? "s" : ""} · also in My Account
-            </p>
+          <div className="mx-auto mt-8 max-w-sm">
+            <QrSlider
+              slides={qrs.map((q) => ({
+                qrstring: q.qrstring,
+                qrcodeimage: q.qrcodeimage,
+                code: q.guestRef || `Guest ${q.guestIndex}`,
+              }))}
+              codeLabel="Guest code"
+              unit="Guest"
+              footnote={`${qrs.length} guest QR${qrs.length > 1 ? "s" : ""} · also in My Account`}
+            />
           </div>
         )}
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
@@ -353,18 +392,22 @@ export default function TableBooking() {
         </div>
       </Reveal>
 
-      {loadingMap ? (
-        <div className="mt-8 aspect-[4/3] w-full animate-pulse rounded-sm bg-surface sm:aspect-[16/10]" />
-      ) : mapError ? (
+      {mapError ? (
         <div className="mt-8 rounded-sm border border-line p-10 text-center">
           <p className="h-display text-2xl">{mapError}</p>
           <p className="mt-3 text-sm text-muted">Try another night.</p>
         </div>
-      ) : layout ? (
-        <div className="mt-8">
+      ) : loadingMap || !layout || !mapReady ? (
+        // hold the blinking 2BHK mark until the plan image is fully decoded
+        <div className="mt-8 -mx-5 flex h-[74svh] items-center justify-center bg-coal sm:mx-0 sm:h-auto sm:aspect-[16/10] sm:rounded-md">
+          <BrandLoader label="Loading floor plan…" />
+        </div>
+      ) : (
+        // full-bleed + tall on mobile; boxed on desktop
+        <div className="mt-8 -mx-5 sm:mx-0">
           <FloorMap layout={layout} selectedIds={selectedIds} onToggle={toggleTable} />
         </div>
-      ) : null}
+      )}
 
       {/* slim Book Now bar — rises from the bottom once tables are picked */}
       {selected.length > 0 && !showModal && (
@@ -373,9 +416,12 @@ export default function TableBooking() {
             <div className="min-w-0">
               <p className="truncate font-display text-sm font-medium uppercase">
                 {selected.length} table{selected.length > 1 ? "s" : ""} ·{" "}
+                <span className="text-gold">{selected[0].zone.label}</span> ·{" "}
                 {selected.map((x) => x.table.label).join(", ")}
               </p>
-              <p className="text-xs text-muted">Tap more tables to add · book together</p>
+              <p className="truncate text-xs text-muted">
+                {inr(quote?.minimumSpend ?? 0)} min spend · tap more tables in this zone to add
+              </p>
             </div>
             <button
               onClick={() => setShowModal(true)}
@@ -465,34 +511,45 @@ export default function TableBooking() {
               ))}
             </div>
 
-            {/* one gender split for the whole party: men slider, women = rest */}
+            {/* gender split — men & women each get their own −/+ (they always
+                total the party size, so raising one lowers the other) */}
             <div className="mt-4 rounded-md border border-line p-3">
-              <div className="flex items-center justify-between">
-                <p className="label !text-[0.5625rem]">
-                  Men <span className="text-cream">{menCount}</span> · Women{" "}
-                  <span className="text-cream">{women}</span>
-                </p>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => setMen(Math.max(0, menCount - 1))}
-                    disabled={menCount <= 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
-                    aria-label="Fewer men"
-                  >
-                    −
-                  </button>
-                  <span className="w-5 text-center font-display text-lg tabular-nums">
-                    {menCount}
-                  </span>
-                  <button
-                    onClick={() => setMen(Math.min(partySize, menCount + 1))}
-                    disabled={menCount >= partySize}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
-                    aria-label="More men"
-                  >
-                    +
-                  </button>
-                </div>
+              <p className="label mb-3 !text-[0.5625rem]">
+                Party split · <span className="font-bold !text-cream">{partySize}</span> guests
+              </p>
+
+              <div className="space-y-3">
+                {(
+                  [
+                    ["Men", menCount, () => setMen(menCount - 1), () => setMen(menCount + 1)],
+                    ["Women", women, () => setMen(menCount + 1), () => setMen(menCount - 1)],
+                  ] as [string, number, () => void, () => void][]
+                ).map(([label, value, dec, inc]) => (
+                  <div key={label} className="flex items-center justify-between">
+                    <span className="label !text-[0.5625rem] !text-cream">{label}</span>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={dec}
+                        disabled={value <= 0}
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                        aria-label={`Fewer ${label.toLowerCase()}`}
+                      >
+                        −
+                      </button>
+                      <span className="w-5 text-center font-display text-lg font-bold tabular-nums text-cream">
+                        {value}
+                      </span>
+                      <button
+                        onClick={inc}
+                        disabled={value >= partySize}
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                        aria-label={`More ${label.toLowerCase()}`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -506,9 +563,46 @@ export default function TableBooking() {
                 <dt className="text-muted">Deposit now ({depositPercent}%)</dt>
                 <dd className="tabular-nums">{inrExact(quote.depositAmount)}</dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">Booking fee + GST</dt>
-                <dd className="tabular-nums">{inrExact(quote.baseamount)}</dd>
+              {/* booking fee with expandable CGST/SGST breakdown */}
+              <button
+                type="button"
+                onClick={() => setShowFeeBreakdown((v) => !v)}
+                className="flex w-full items-center justify-between gap-4"
+                aria-expanded={showFeeBreakdown}
+              >
+                <span className="flex items-center gap-1.5 text-muted">
+                  Booking fee + GST
+                  <span
+                    className={`inline-block text-xs transition-transform duration-300 ${
+                      showFeeBreakdown ? "rotate-180" : ""
+                    }`}
+                  >
+                    ▾
+                  </span>
+                </span>
+                <span className="tabular-nums">{inrExact(quote.baseamount)}</span>
+              </button>
+              <div
+                className={`grid transition-all duration-300 ${
+                  showFeeBreakdown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="space-y-2 pl-3 text-xs text-muted">
+                    <div className="flex justify-between gap-4">
+                      <span>Base fee</span>
+                      <span className="tabular-nums">{inrExact(quote.bookingFee)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span>CGST (9%)</span>
+                      <span className="tabular-nums">{inrExact(quote.cgst)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span>SGST (9%)</span>
+                      <span className="tabular-nums">{inrExact(quote.cgst)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="mt-1 flex justify-between gap-4 rounded-md border border-line bg-elevated px-4 py-3 text-base">
                 <dt className="font-display font-semibold uppercase">Pay now</dt>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Button from "@/components/ui/Button";
 import TicketCard from "@/components/account/TicketCard";
-import TicketModal from "@/components/account/TicketModal";
+import TicketModal, { groupTickets, type TicketBooking } from "@/components/account/TicketModal";
 import { getGuestTickets } from "@/lib/api";
 import type { RizztixTicketDetail } from "@/types";
 
@@ -18,7 +18,7 @@ export default function GuestTicketView() {
   const token = params.get("token") ?? "";
   const [tickets, setTickets] = useState<RizztixTicketDetail[] | undefined>(undefined);
   const [error, setError] = useState("");
-  const [open, setOpen] = useState<RizztixTicketDetail | null>(null);
+  const [open, setOpen] = useState<TicketBooking | null>(null);
 
   useEffect(() => {
     if (!id || !token) {
@@ -71,25 +71,26 @@ export default function GuestTicketView() {
     );
   }
 
-  /* tickets */
+  /* tickets — grouped into one entry per booking ref */
   const title = tickets[0].eventDetails?.title ?? "2BHK";
+  const bookings = groupTickets(tickets);
   return (
     <div className="mx-auto max-w-3xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <p className="label mb-3">Your tickets</p>
       <h1 className="h-display !normal-case text-4xl md:text-5xl">{title}</h1>
       <p className="mt-3 text-sm text-muted">
         {tickets.length > 1
-          ? `${tickets.length} tickets — tap each for its entry QR.`
+          ? `${tickets.length} tickets — tap to see every entry QR.`
           : "Tap your ticket for the entry QR."}
       </p>
 
       <div className="mt-8 space-y-3">
-        {tickets.map((t) => (
-          <TicketCard key={t._id} ticket={t} onView={setOpen} />
+        {bookings.map((g) => (
+          <TicketCard key={g.key} booking={g} onView={setOpen} />
         ))}
       </div>
 
-      {open && <TicketModal ticket={open} onClose={() => setOpen(null)} />}
+      {open && <TicketModal booking={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }

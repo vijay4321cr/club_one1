@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import gsap from "gsap";
-import TicketQr from "@/components/account/TicketQr";
+import QrSlider, { type QrSlide } from "@/components/account/QrSlider";
 import { inr, eventDateLong } from "@/lib/format";
 import type { RizztixTicketDetail, RizztixPassQr } from "@/types";
 
@@ -44,20 +44,79 @@ export function passQrs(t: RizztixTicketDetail): RizztixPassQr[] {
   return [];
 }
 
+/** All tickets that belong to one booking reference. */
+export interface TicketBooking {
+  key: string;
+  bookingref?: string;
+  orderid?: string;
+  orderstatus?: string;
+  tickets: RizztixTicketDetail[];
+}
+
+/** Group a flat ticket list into one entry per booking ref (orderid/_id fallback). */
+export function groupTickets(tickets: RizztixTicketDetail[]): TicketBooking[] {
+  const map = new Map<string, RizztixTicketDetail[]>();
+  const order: string[] = [];
+  for (const t of tickets) {
+    const key = t.bookingref || t.orderid || t._id;
+    if (!map.has(key)) {
+      map.set(key, []);
+      order.push(key);
+    }
+    map.get(key)!.push(t);
+  }
+  return order.map((key) => {
+    const ts = map.get(key)!;
+    return {
+      key,
+      bookingref: ts[0].bookingref,
+      orderid: ts[0].orderid,
+      orderstatus: ts[0].orderstatus,
+      tickets: ts,
+    };
+  });
+}
+
+/** Every pass across every ticket of a booking, as QR-slider slides. */
+export function bookingSlides(tickets: RizztixTicketDetail[]): QrSlide[] {
+  return tickets.flatMap((t) =>
+    passQrs(t).map((q) => ({
+      qrstring: q.qrstring,
+      qrcode: q.qrcode,
+      qrcodeimage: q.qrcodeimage,
+      code: q.ticketId || t.ticketid || t.bookingref || "",
+    }))
+  );
+}
+
+/** distinct ticket types of a booking with summed counts */
+export function ticketTypeLines(tickets: RizztixTicketDetail[]): { type: string; count: number }[] {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const t of tickets) {
+    const type = t.tickettype ?? "Ticket";
+    if (!counts.has(type)) order.push(type);
+    counts.set(type, (counts.get(type) ?? 0) + (t.noofticket ?? 1));
+  }
+  return order.map((type) => ({ type, count: counts.get(type)! }));
+}
+
 interface Props {
-  ticket: RizztixTicketDetail;
+  booking: TicketBooking;
   onClose: () => void;
 }
 
-/** Ticket details + QR pass slider in an animated popup. */
-export default function TicketModal({ ticket, onClose }: Props) {
+/** A whole booking's details + all its pass QRs in an animated popup. */
+export default function TicketModal({ booking, onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const touchX = useRef<number | null>(null);
-  const [idx, setIdx] = useState(0);
 
-  const qrs = passQrs(ticket);
-  const ev = ticket.eventDetails;
+  const tickets = booking.tickets;
+  const first = tickets[0];
+  const ev = first?.eventDetails;
+  const slides = bookingSlides(tickets);
+  const lines = ticketTypeLines(tickets);
+  const total = tickets.reduce((s, t) => s + (t.ticketprice ?? 0) * (t.noofticket ?? 1), 0);
 
   /* open animation */
   useEffect(() => {
@@ -89,14 +148,10 @@ export default function TicketModal({ ticket, onClose }: Props) {
   }, [onClose]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-      if (e.key === "ArrowRight") setIdx((i) => Math.min(qrs.length - 1, i + 1));
-      if (e.key === "ArrowLeft") setIdx((i) => Math.max(0, i - 1));
-    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close, qrs.length]);
+  }, [close]);
 
   return (
     <div
@@ -117,8 +172,19 @@ export default function TicketModal({ ticket, onClose }: Props) {
         <div className="flex items-start justify-between gap-4 border-b border-line p-5">
           <div className="tm-stagger">
             <p className="label !text-[0.5625rem]">
-              {ticket.bookingref}
-              {ticket.orderstatus && <span className="text-primary"> · {ticket.orderstatus}</span>}
+              {booking.bookingref}
+              {booking.orderstatus && (
+                <span
+                  className={
+                    /paid|confirm|success|complete/i.test(booking.orderstatus)
+                      ? "text-green-500"
+                      : "text-primary"
+                  }
+                >
+                  {" "}
+                  · {booking.orderstatus}
+                </span>
+              )}
             </p>
             <h3 className="mt-1 font-display text-xl font-semibold uppercase leading-tight">
               {ev?.title ?? "2BHK event"}
@@ -136,132 +202,22 @@ export default function TicketModal({ ticket, onClose }: Props) {
           </button>
         </div>
 
-        {/* ticket meta */}
+        {/* booking meta — every ticket type + count, and the total */}
         <div className="tm-stagger flex flex-wrap items-center gap-2 px-5 pt-4">
-          <span className="rounded-full border border-primary/50 bg-primary/15 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-primary">
-            {ticket.tickettype ?? "Ticket"}
-          </span>
-          <span className="rounded-full border border-line px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em]">
-            × {ticket.noofticket ?? 1}
-          </span>
-          {(ticket.passesPerUnit ?? 1) > 1 && (
-            <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em] text-gold">
-              Admits {ticket.passesPerUnit}
+          {lines.map((l) => (
+            <span
+              key={l.type}
+              className="rounded-full border border-primary/50 bg-primary/15 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-primary"
+            >
+              {l.type} × {l.count}
             </span>
-          )}
-          {typeof ticket.ticketprice === "number" && (
-            <span className="ml-auto font-display text-lg">
-              {inr(ticket.ticketprice * (ticket.noofticket ?? 1))}
-            </span>
-          )}
+          ))}
+          {total > 0 && <span className="ml-auto font-display text-lg">{inr(total)}</span>}
         </div>
 
-        {/* QR slider */}
+        {/* every pass QR across the booking */}
         <div className="tm-stagger p-5">
-          <div
-            className="overflow-hidden"
-            onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
-            onTouchEnd={(e) => {
-              if (touchX.current === null) return;
-              const dx = e.changedTouches[0].clientX - touchX.current;
-              if (dx < -40) setIdx((i) => Math.min(qrs.length - 1, i + 1));
-              if (dx > 40) setIdx((i) => Math.max(0, i - 1));
-              touchX.current = null;
-            }}
-          >
-            <div
-              className="flex transition-transform duration-500 ease-out"
-              style={{ transform: `translateX(-${idx * 100}%)` }}
-            >
-              {qrs.map((q) => (
-                <div
-                  key={q.passIndex}
-                  className="flex min-w-full flex-col items-center px-2"
-                  aria-hidden={qrs[idx].passIndex !== q.passIndex}
-                >
-                  {/* themed ticket stub */}
-                  <div className="w-64 overflow-hidden rounded-lg bg-cream text-coal shadow-lg shadow-black/40">
-                    {/* scan zone — QR generated on-device, falls back safely */}
-                    <div className="p-5 pb-4">
-                      <div className="mx-auto h-48 w-48">
-                        <TicketQr
-                          qrstring={q.qrstring}
-                          qrcode={q.qrcode}
-                          qrcodeimage={q.qrcodeimage}
-                          className="h-full w-full"
-                        />
-                      </div>
-                    </div>
-
-                    {/* perforated tear line */}
-                    <div className="relative flex items-center">
-                      <span aria-hidden className="absolute -left-3 h-6 w-6 rounded-full bg-surface" />
-                      <span aria-hidden className="absolute -right-3 h-6 w-6 rounded-full bg-surface" />
-                      <span aria-hidden className="mx-5 w-full border-t-2 border-dashed border-coal/20" />
-                    </div>
-
-                    {/* stub: code + brand */}
-                    <div className="flex items-center justify-between px-5 py-4">
-                      <div>
-                        <p className="text-[0.5625rem] font-semibold uppercase tracking-[0.2em] text-coal/50">
-                          Ticket code
-                        </p>
-                        <p className="font-display text-xl font-semibold uppercase tracking-[0.1em]">
-                          {q.ticketId}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-display text-lg font-bold uppercase leading-none">
-                          <span className="text-primary">2</span>BHK
-                        </p>
-                        {qrs.length > 1 && (
-                          <p className="mt-1 text-[0.5625rem] font-semibold uppercase tracking-[0.2em] text-coal/50">
-                            Pass {q.passIndex}/{qrs.length}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* slider controls */}
-          {qrs.length > 1 && (
-            <div className="mt-4 flex items-center justify-center gap-5">
-              <button
-                onClick={() => setIdx((i) => Math.max(0, i - 1))}
-                disabled={idx === 0}
-                aria-label="Previous pass"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-30"
-              >
-                ←
-              </button>
-              <div className="flex items-center gap-2">
-                {qrs.map((q, i) => (
-                  <button
-                    key={q.passIndex}
-                    onClick={() => setIdx(i)}
-                    aria-label={`Go to pass ${i + 1}`}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      i === idx ? "w-6 bg-primary" : "w-2 bg-line hover:bg-cream/40"
-                    }`}
-                  />
-                ))}
-              </div>
-              <button
-                onClick={() => setIdx((i) => Math.min(qrs.length - 1, i + 1))}
-                disabled={idx === qrs.length - 1}
-                aria-label="Next pass"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-30"
-              >
-                →
-              </button>
-            </div>
-          )}
-
-          <p className="label mt-5 text-center !text-[0.5625rem]">Show this at the door</p>
+          <QrSlider slides={slides} codeLabel="Ticket code" unit="Pass" footnote="Show this at the gate" />
         </div>
       </div>
     </div>

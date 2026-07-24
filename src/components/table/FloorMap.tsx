@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import MapGuide from "@/components/table/MapGuide";
 import { inr } from "@/lib/format";
 import type { TableLayout, TableZone, TableSpot } from "@/types";
+
+const GUIDE_KEY = "bhk:map-guide-seen";
 
 interface Props {
   layout: TableLayout;
@@ -18,6 +21,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
 
+  const [showGuide, setShowGuide] = useState(false);
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 }); // render-safe copy of nat ref
@@ -27,6 +31,8 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
   const zonesWithSelection = new Set(
     layout.areas.filter((z) => z.tables?.some((t) => selectedSet.has(t._id))).map((z) => z._id)
   );
+  // multi-table is one-zone-only — once a table is picked, other zones lock
+  const activeZoneId = [...zonesWithSelection][0] ?? null;
 
   const nat = useRef({ w: 0, h: 0 }); // natural image px
   const view = useRef<View>({ s: 1, tx: 0, ty: 0, min: 0.2, max: 8 });
@@ -41,7 +47,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     const l = layerRef.current;
     if (!l) return;
     const v = view.current;
-    l.style.transition = animate ? "transform 0.45s cubic-bezier(0.22,1,0.36,1)" : "none";
+    l.style.transition = animate ? "transform 1.2s cubic-bezier(0.65,0,0.35,1)" : "none";
     l.style.transform = `translate3d(${v.tx}px, ${v.ty}px, 0) scale(${v.s})`;
     l.style.setProperty("--s", String(v.s));
   }, []);
@@ -57,17 +63,22 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     apply(animate);
   };
 
+  // the overview isn't the fully zoomed-out image — it's this much closer,
+  // and that same level is the hard minimum (you can't zoom out past it)
+  const OVERVIEW = 1.35;
+
   const fit = useCallback(() => {
     const vp = viewportRef.current;
     if (!vp || !nat.current.w) return;
     const vw = vp.clientWidth;
     const vh = vp.clientHeight;
     const fitS = Math.min(vw / nat.current.w, vh / nat.current.h);
-    view.current.min = fitS * 0.85;
+    const overviewS = fitS * OVERVIEW;
+    view.current.min = overviewS; // never zoom out beyond the overview
     view.current.max = fitS * 7;
-    view.current.s = fitS;
-    view.current.tx = (vw - nat.current.w * fitS) / 2;
-    view.current.ty = (vh - nat.current.h * fitS) / 2;
+    view.current.s = overviewS;
+    view.current.tx = (vw - nat.current.w * overviewS) / 2;
+    view.current.ty = (vh - nat.current.h * overviewS) / 2;
     apply(true);
   }, [apply]);
 
@@ -117,20 +128,29 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     [boundsForZone, focusBounds]
   );
 
-  // a nice zone to open by default so the map lands "showcasing" a section
-  const defaultZone =
-    layout.areas.find((z) => z.tables?.some((t) => t.pinColor === "green")) ??
-    layout.areas.find((z) => z.tables?.length) ??
-    null;
-
-  /* image load → measure, fit, then smoothly showcase a zone */
+  /* image load → measure, land on the zone-dot overview */
   const onImgLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     nat.current = { w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight };
     setNatSize(nat.current);
     fit();
-    // let the fitted plan paint, fade the loader, then glide into a zone
     setTimeout(() => setReady(true), 150);
-    if (defaultZone) setTimeout(() => focusZone(defaultZone), 650);
+    // first-timers get the walkthrough once the plan is actually on screen
+    setTimeout(() => {
+      try {
+        if (!localStorage.getItem(GUIDE_KEY)) setShowGuide(true);
+      } catch {
+        /* ignore */
+      }
+    }, 700);
+  };
+
+  const closeGuide = () => {
+    setShowGuide(false);
+    try {
+      localStorage.setItem(GUIDE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
   };
 
   /* refit on resize — keep the focused zone framed */
@@ -238,17 +258,23 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
 
   const px = (n: number, axis: "w" | "h") => n * (axis === "w" ? natSize.w : natSize.h);
 
-  // every bookable spot from every zone stays on the map at all zoom levels
-  const flatSpots = layout.areas.flatMap((z) =>
-    z.tables?.length
-      ? z.tables.map((t) => ({ spot: t, zone: z, isZoneItself: false }))
-      : [{ spot: z as TableSpot, zone: z, isZoneItself: true }]
-  );
+  // tap empty map (not a dot) while inside a zone → smoothly zoom back out
+  const onLayerTap = () => {
+    if (dragged.current) return;
+    if (zone) backToOverview();
+  };
+
+  // overview → one dot per zone; focused → that zone's table dots
+  const spots: { spot: TableSpot; z: TableZone; isZoneDot: boolean }[] = zone
+    ? zone.tables?.length
+      ? zone.tables.map((t) => ({ spot: t, z: zone, isZoneDot: false }))
+      : [{ spot: zone as TableSpot, z: zone, isZoneDot: true }]
+    : layout.areas.map((z) => ({ spot: z as TableSpot, z, isZoneDot: true }));
 
   return (
     <div>
       {/* legend */}
-      <div className="mb-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-[0.6875rem] uppercase tracking-[0.12em] text-muted">
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 px-5 text-[0.6875rem] uppercase tracking-[0.12em] text-muted sm:px-0">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_6px] shadow-green-500" /> Available
         </span>
@@ -263,7 +289,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
       <div
         ref={viewportRef}
         onPointerDown={onPointerDown}
-        className="relative h-[62vh] max-h-[720px] min-h-[360px] cursor-grab touch-none select-none overflow-hidden rounded-md bg-coal active:cursor-grabbing"
+        className="relative h-[74svh] max-h-[720px] min-h-[360px] cursor-grab touch-none select-none overflow-hidden rounded-none bg-coal active:cursor-grabbing sm:h-[62vh] sm:rounded-md"
       >
         {/* controls */}
         <div className="absolute left-3 top-3 z-20 flex flex-col gap-2">
@@ -298,11 +324,19 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
           >
             ⤢
           </button>
+          <button
+            onClick={() => setShowGuide(true)}
+            aria-label="How to use this map"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-sm font-bold text-coal shadow-lg shadow-black/40 transition-transform hover:scale-105"
+          >
+            ?
+          </button>
         </div>
 
         {/* transformed layer (image + polygons + pins) */}
         <div
           ref={layerRef}
+          onClick={onLayerTap}
           className="absolute left-0 top-0 origin-top-left"
           style={{ width: natSize.w || "100%", height: natSize.h || "auto", ["--s" as string]: "1" }}
         >
@@ -327,67 +361,93 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                 const pts = z.outlinePolygon.map((p) => `${px(p.x, "w")},${px(p.y, "h")}`).join(" ");
                 const focused = zone?._id === z._id;
                 const hasSel = zonesWithSelection.has(z._id);
+                const hasAvailable = !!z.tables?.some((t) => t.pinColor === "green");
+                const hasSoldOut = !!z.tables?.some((t) => t.pinColor === "red");
+                // none available + some booked → sold out (red)
+                const soldOut = !!z.tables?.length && !hasAvailable && hasSoldOut;
+                // none available + none booked → the whole zone is unavailable (yellow)
+                const allUnavailable = !!z.tables?.length && !hasAvailable && !hasSoldOut;
                 const clickable = z.selectable !== false && !!z.tables?.length;
+                // priority: green (picked) → red (sold out) → yellow (unavailable) → white (viewing)
+                const animatedWhite = focused && !hasSel && !soldOut && !allUnavailable;
+                const strokeColor = hasSel
+                  ? "#22c55e"
+                  : soldOut
+                    ? "#e10600"
+                    : allUnavailable
+                      ? "#c9a227"
+                      : focused
+                        ? "#ffffff"
+                        : "rgba(245,245,240,0.28)";
+                const fillColor = hasSel
+                  ? "rgba(34,197,94,0.14)"
+                  : soldOut
+                    ? "rgba(225,6,0,0.10)"
+                    : allUnavailable
+                      ? "rgba(201,162,39,0.10)"
+                      : focused
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(245,245,240,0.02)";
                 return (
                   <polygon
                     key={z._id}
                     points={pts}
-                    onClick={() => {
+                    onClick={(e) => {
                       if (dragged.current) return;
-                      if (clickable) focusZone(z);
+                      if (clickable) {
+                        e.stopPropagation();
+                        focusZone(z);
+                      }
                     }}
-                    className={clickable ? "cursor-pointer transition-all" : ""}
-                    fill={
-                      focused
-                        ? "rgba(34,197,94,0.10)"
-                        : hasSel
-                          ? "rgba(34,197,94,0.12)"
-                          : clickable
-                            ? "rgba(245,245,240,0.02)"
-                            : "transparent"
-                    }
-                    stroke={
-                      focused
-                        ? "#22c55e"
-                        : hasSel
-                          ? "rgba(34,197,94,0.7)"
-                          : "rgba(245,245,240,0.28)"
-                    }
-                    strokeWidth={focused ? 2.5 : 1.5}
+                    className={`${clickable ? "cursor-pointer" : ""} ${
+                      animatedWhite ? "zone-focus" : "transition-all"
+                    }`}
+                    fill={fillColor}
+                    stroke={strokeColor}
+                    strokeWidth={hasSel || focused ? 3 : soldOut || allUnavailable ? 2 : 1.5}
+                    strokeDasharray={animatedWhite ? "10 7" : undefined}
+                    strokeLinecap="round"
                     strokeLinejoin="round"
                     vectorEffect="non-scaling-stroke"
-                    style={{ pointerEvents: clickable ? "auto" : "none" }}
+                    style={{
+                      pointerEvents: clickable ? "auto" : "none",
+                      filter: hasSel
+                        ? "drop-shadow(0 0 4px rgba(34,197,94,0.8))"
+                        : animatedWhite
+                          ? "drop-shadow(0 0 5px rgba(255,255,255,0.85))"
+                          : undefined,
+                    }}
                   />
                 );
               })}
             </svg>
           )}
 
-          {/* pins — every table on the map; the focused zone's are emphasised */}
+          {/* pins — one dot per zone in overview; that zone's tables when focused */}
           {natSize.w > 0 &&
-            flatSpots.map(({ spot, zone: z, isZoneItself }) => {
+            spots.map(({ spot, z, isZoneDot }) => {
               const isSel = selectedSet.has(spot._id);
-              const clickable = spot.selectable !== false;
-              const inFocus = zone?._id === z._id;
+              // a table in another zone is locked once a pick exists (one-zone rule)
+              const zoneLocked = !isZoneDot && !!activeZoneId && z._id !== activeZoneId;
+              const clickable = spot.selectable !== false && !zoneLocked;
+              const overview = !zone;
               const color = pinColor(spot.pinColor);
               const top = pinTop(spot.pinColor);
               const available = spot.pinColor === "green";
-              // labels only where it matters — focused zone (or a selection) —
-              // so the map isn't buried under 50 price tags
-              const showLabel = (inFocus || isSel) && (available || isSel);
-              const emphasised = inFocus || isSel;
+              // overview: label every zone dot; focused: price on available/selected
+              const showLabel = overview || available || isSel;
+              const emphasised = true;
 
               return (
                 <button
                   key={spot._id}
-                  disabled={!clickable}
-                  onClick={() => {
+                  disabled={(!clickable && !isZoneDot) || zoneLocked}
+                  onClick={(e) => {
                     if (dragged.current) return;
-                    if (isZoneItself && z.tables?.length) focusZone(z);
-                    else {
-                      setZoneId(z._id); // light up the whole zone…
-                      onToggle(z, spot); // …and toggle this table
-                    }
+                    e.stopPropagation(); // don't let a dot tap zoom the map out
+                    if (zoneLocked) return;
+                    if (isZoneDot && z.tables?.length) focusZone(z);
+                    else onToggle(z, spot);
                   }}
                   className="group absolute p-2.5"
                   style={{
@@ -452,7 +512,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                       }`}
                       style={{ boxShadow: "0 3px 10px rgba(0,0,0,0.5)" }}
                     >
-                      {isZoneItself && !z.tables?.length ? (
+                      {isZoneDot ? (
                         <>
                           {spot.label}
                           {spot.tablesLeft ? ` · ${spot.tablesLeft} left` : ""}
@@ -480,9 +540,12 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
             <p className="label relative !text-muted">Loading floor plan…</p>
           </div>
         )}
+
+        {/* first-run walkthrough (re-openable from the ? button) */}
+        {showGuide && ready && <MapGuide onClose={closeGuide} />}
       </div>
 
-      <p className="mt-3 text-center text-xs text-muted">
+      <p className="mt-3 px-5 text-center text-xs text-muted sm:px-0">
         {zone
           ? "Tap a table to select · drag to pan · pinch or scroll to zoom"
           : "Tap an area to open it · drag to pan · pinch or scroll to zoom"}

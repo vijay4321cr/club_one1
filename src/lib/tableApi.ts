@@ -11,6 +11,7 @@ import type {
   TableLayoutsResult,
   TableInitResult,
   TableBooking,
+  TableGuestQr,
 } from "@/types";
 
 interface Envelope<T> {
@@ -146,10 +147,68 @@ export function confirmTableBooking(input: {
   });
 }
 
-/** API E — my table bookings. */
+/** ref that looks like a combined parent, e.g. "1KZXQWX (2 tables)" */
+const isParentRef = (ref?: string) => !!ref && /\(\s*\d+\s*tables?\s*\)/i.test(ref);
+
+/**
+ * A multi-table booking comes back as one record per table (each its own
+ * bookingref) that all share a single `orderid`. Collapse each order into one
+ * entry so the account shows a single booking with every guest QR together.
+ */
+export function groupTableBookings(list: TableBooking[]): TableBooking[] {
+  const byOrder = new Map<string, TableBooking[]>();
+  const loose: TableBooking[] = [];
+  for (const b of list) {
+    if (b.orderid) byOrder.set(b.orderid, [...(byOrder.get(b.orderid) ?? []), b]);
+    else loose.push(b);
+  }
+
+  const grouped: TableBooking[] = [];
+  for (const members of byOrder.values()) {
+    if (members.length === 1) {
+      grouped.push(members[0]);
+      continue;
+    }
+    // prefer the combined parent record ("… (N tables)"); else the first
+    const parent = members.find((m) => isParentRef(m.bookingref)) ?? members[0];
+    const children = members.filter((m) => m !== parent);
+    const tables = children.length || members.length;
+
+    // gather every guest QR across the group, de-duped by guest ref
+    const seen = new Set<string>();
+    const qrs: TableGuestQr[] = [];
+    for (const m of members)
+      for (const q of m.guestQrcodes ?? []) {
+        const key = q.guestRef || `${m._id}:${q.guestIndex}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        qrs.push(q);
+      }
+
+    const labels = members
+      .map((m) => m.table?.tableLabel ?? m.areaLabel)
+      .filter((x): x is string => !!x);
+
+    grouped.push({
+      ...parent,
+      bookingref: isParentRef(parent.bookingref)
+        ? parent.bookingref
+        : `${parent.bookingref} (${tables} tables)`,
+      tableCount: tables,
+      partySize: children.length
+        ? children.reduce((s, m) => s + (m.partySize || 0), 0)
+        : members.reduce((s, m) => s + (m.partySize || 0), 0),
+      areaLabel: labels.length ? Array.from(new Set(labels)).join(" · ") : parent.areaLabel,
+      guestQrcodes: qrs.length ? qrs : parent.guestQrcodes,
+    });
+  }
+  return [...grouped, ...loose];
+}
+
+/** API E — my table bookings (multi-table orders collapsed to one entry). */
 export async function getMyTableBookings(): Promise<TableBooking[]> {
   const data = await authFetch<{ bookings?: TableBooking[] }>("/club/table-booking/booking/mine");
-  return data?.bookings ?? [];
+  return groupTableBookings(data?.bookings ?? []);
 }
 
 /** API F — one booking by id. */

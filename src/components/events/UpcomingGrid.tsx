@@ -11,14 +11,21 @@ interface Props {
   /** when provided, the grid renders its own heading with the search on that row */
   label?: string;
   title?: ReactNode;
+  /** home page: cap the grid at 2 columns once there are more than 6 events */
+  homeGrid?: boolean;
 }
 
 /** Live events grid: skeleton, empty state, and search (when >3 events). */
-export default function UpcomingGrid({ label, title }: Props) {
+export default function UpcomingGrid({ label, title, homeGrid }: Props) {
   const data = useUpcomingEvents();
   const [query, setQuery] = useState("");
   const hasHeading = !!(label || title);
   const showSearch = !!data && data.events.length > 3;
+  // home + >6 events → 2-up on MOBILE only; tablet/desktop stay 2/3 as before
+  const mobileTwoUp = !!homeGrid && !!data && data.events.length > 6;
+  const gridClass = mobileTwoUp
+    ? "grid grid-cols-2 gap-x-4 gap-y-10 sm:grid-cols-2 sm:gap-x-6 sm:gap-y-12 lg:grid-cols-3"
+    : "grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3";
 
   const searchField = (className = "") => (
     <div className={`flex items-center gap-3 border-b border-line focus-within:border-primary ${className}`}>
@@ -32,7 +39,7 @@ export default function UpcomingGrid({ label, title }: Props) {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search events, artists, genres…"
         aria-label="Search events"
-        className="w-full bg-transparent py-2.5 text-sm text-cream placeholder:text-muted/60 focus:outline-none"
+        className="w-full bg-transparent py-2.5 text-base text-cream placeholder:text-muted/60 focus:outline-none sm:text-sm"
       />
       {query && (
         <button
@@ -121,7 +128,7 @@ export default function UpcomingGrid({ label, title }: Props) {
           <p className="mt-3 text-sm text-muted">Try an artist name, genre or event title.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={gridClass}>
           {filtered.map((e, i) => (
             <FxReveal key={`${e._id}-${query ? "s" : "a"}`} effect="tilt" delay={(i % 3) * 0.08}>
               <RizztixEventCard event={e} />

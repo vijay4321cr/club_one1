@@ -97,7 +97,7 @@ function Ring({ items, entrance, onFront }: RingProps) {
             {g.image && (
               <DreiImage
                 url={g.image}
-                scale={[1.5, 1.9]}
+                scale={[1.6, 2.3]}
                 radius={0.08}
                 side={THREE.DoubleSide}
                 toneMapped={false}
@@ -154,7 +154,7 @@ export default function Ring3D({ items }: { items: RingItem[] }) {
     return () => ctx.revert();
   }, [mode]);
 
-  if (mode === null) return <div className="h-[260px] md:h-[360px]" />;
+  if (mode === null) return <div className="h-[320px] md:h-[440px]" />;
 
   /* fallback: compact flat grid */
   if (mode === "flat") {
@@ -176,7 +176,7 @@ export default function Ring3D({ items }: { items: RingItem[] }) {
     <div>
       <div
         ref={wrapRef}
-        className="ring3d relative h-[260px] cursor-grab select-none active:cursor-grabbing md:h-[360px]"
+        className="ring3d relative h-[320px] cursor-grab select-none active:cursor-grabbing md:h-[440px]"
       >
         <Canvas camera={{ position: [0, 0, 6.2], fov: 38 }} dpr={[1, 1.5]} gl={{ alpha: true, antialias: true }}>
           <Suspense fallback={null}>
