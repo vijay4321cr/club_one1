@@ -76,6 +76,7 @@ export interface TableInitInput {
   femalePax: number;
   clubId?: string;
   eventId?: string;
+  empref?: string; // optional staff/employee referral code
   minimumSpend: number;
   depositAmount: number;
   bookingFee: number;
@@ -90,6 +91,8 @@ export interface TableInitInput {
 /** API C — create hold + payment order. */
 export function initTableBooking(input: TableInitInput): Promise<TableInitResult> {
   const payNow = input.payNowAmount.toFixed(2);
+  // empref is optional — trimmed, uppercased, ≤32 chars, sent only when non-empty
+  const empref = (input.empref ?? "").trim().toUpperCase().slice(0, 32);
   return authFetch<TableInitResult>("/club/table-booking/booking/init", {
     body: {
       layoutId: input.layoutId,
@@ -105,6 +108,7 @@ export function initTableBooking(input: TableInitInput): Promise<TableInitResult
       slug: CLUB_SLUG,
       clubId: input.clubId,
       eventId: input.eventId,
+      ...(empref ? { empref } : {}),
       // money — send both casings exactly like the reference frontend
       gst: input.gst,
       tax: input.gst,

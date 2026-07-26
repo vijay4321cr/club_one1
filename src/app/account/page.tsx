@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import TicketModal, { groupTickets, type TicketBooking } from "@/components/account/TicketModal";
 import TicketCard from "@/components/account/TicketCard";
 import TableBookingCard from "@/components/account/TableBookingCard";
-import { logout, ApiError } from "@/lib/auth";
+import { Input } from "@/components/ui/Input";
+import { logout, updateUser, ApiError } from "@/lib/auth";
 import { getAllTicketDetails } from "@/lib/api";
 import { getMyTableBookings } from "@/lib/tableApi";
 import { useAuth } from "@/lib/useAuth";
@@ -27,12 +28,30 @@ function displayDob(dob?: string) {
     : d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 }
 
+/** 10-digit local number for editing (strips a leading 91 country code) */
+function tenDigitPhone(phone?: string) {
+  return (phone ?? "").replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+}
+
+/** YYYY-MM-DD for a native date input */
+function dobForInput(dob?: string) {
+  if (!dob) return "";
+  const d = new Date(dob);
+  return isNaN(+d) ? "" : d.toISOString().slice(0, 10);
+}
+
 export default function AccountPage() {
   const { session, user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("tickets");
   const [tickets, setTickets] = useState<RizztixTicketDetail[] | null>(null);
   const [error, setError] = useState("");
   const [openBooking, setOpenBooking] = useState<TicketBooking | null>(null);
+  // profile editing
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: "", phone: "", email: "", dob: "" });
+  const [saveState, setSaveState] = useState<"idle" | "busy" | "error">("idle");
+  const [saveErr, setSaveErr] = useState("");
+  const [savedNote, setSavedNote] = useState(false);
   const [tables, setTables] = useState<TableBooking[] | null>(null);
   // deep-link: which order's QR to reveal, from ?order= (read once on mount)
   const [orderParam, setOrderParam] = useState<string | null>(null);
@@ -55,6 +74,40 @@ export default function AccountPage() {
   const closeBooking = () => {
     setOpenBooking(null);
     syncUrl(null);
+  };
+
+  const startEdit = () => {
+    if (!user) return;
+    setForm({
+      name: user.fullname ?? "",
+      phone: tenDigitPhone(user.phone),
+      email: user.email ?? "",
+      dob: dobForInput(user.dob),
+    });
+    setSaveErr("");
+    setSavedNote(false);
+    setEditing(true);
+  };
+
+  const saveProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    if (saveState === "busy") return;
+    setSaveState("busy");
+    setSaveErr("");
+    try {
+      await updateUser({
+        name: form.name.trim(),
+        phone: form.phone.replace(/\D/g, ""),
+        email: form.email.trim(),
+        dob: form.dob,
+      });
+      setEditing(false);
+      setSavedNote(true);
+      setSaveState("idle");
+    } catch (err) {
+      setSaveErr(err instanceof ApiError ? err.message : "Could not save — please try again.");
+      setSaveState("error");
+    }
   };
 
   useEffect(() => {
@@ -213,26 +266,77 @@ export default function AccountPage() {
       )}
 
       {tab === "profile" && (
-        <div className="mt-8 max-w-md space-y-6">
-          <div>
-            <p className="label mb-1">Full name</p>
-            <p className="border-b border-line py-3">{user.fullname}</p>
-          </div>
-          <div>
-            <p className="label mb-1">Mobile</p>
-            <p className="border-b border-line py-3">{displayPhone(user.phone)}</p>
-          </div>
-          <div>
-            <p className="label mb-1">Email</p>
-            <p className="border-b border-line py-3">{user.email}</p>
-          </div>
-          <div>
-            <p className="label mb-1">Date of birth</p>
-            <p className="border-b border-line py-3">{displayDob(user.dob)}</p>
-          </div>
-          <p className="text-xs text-muted">
-            Details are tied to your booking account. To change them, contact us.
-          </p>
+        <div className="mt-8 max-w-md">
+          {editing ? (
+            <form className="space-y-6" onSubmit={saveProfile}>
+              <Input
+                label="Full name"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Your name"
+              />
+              <Input
+                label="Mobile"
+                type="tel"
+                inputMode="numeric"
+                required
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({ ...form, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })
+                }
+                placeholder="10-digit number"
+              />
+              <Input
+                label="Email"
+                type="email"
+                required
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="you@email.com"
+              />
+              <Input
+                label="Date of birth"
+                type="date"
+                value={form.dob}
+                onChange={(e) => setForm({ ...form, dob: e.target.value })}
+              />
+              {saveErr && <p className="text-sm text-primary">{saveErr}</p>}
+              <div className="flex gap-3">
+                <Button type="submit" disabled={saveState === "busy"}>
+                  {saveState === "busy" ? "Saving…" : "Save changes"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="label !text-muted transition-colors hover:!text-cream"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <p className="label mb-1">Full name</p>
+                <p className="border-b border-line py-3">{user.fullname}</p>
+              </div>
+              <div>
+                <p className="label mb-1">Mobile</p>
+                <p className="border-b border-line py-3">{displayPhone(user.phone)}</p>
+              </div>
+              <div>
+                <p className="label mb-1">Email</p>
+                <p className="border-b border-line py-3">{user.email}</p>
+              </div>
+              <div>
+                <p className="label mb-1">Date of birth</p>
+                <p className="border-b border-line py-3">{displayDob(user.dob)}</p>
+              </div>
+              {savedNote && <p className="text-sm text-green-500">Profile updated ✓</p>}
+              <Button onClick={startEdit}>Edit details</Button>
+            </div>
+          )}
         </div>
       )}
 

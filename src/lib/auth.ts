@@ -131,6 +131,35 @@ export async function resendOtp(phone: string): Promise<void> {
   await post("/user/resendOtp", { phone });
 }
 
+/* ---------------- edit profile ---------------- */
+
+export interface EditUserInput {
+  name: string;
+  phone: string;
+  email: string;
+  dob: string; // YYYY-MM-DD
+}
+
+/** PUT /user/editUser — saves the profile and refreshes the stored session. */
+export async function updateUser(input: EditUserInput): Promise<RizztixUser> {
+  const data = await authFetch<{ user?: RizztixUser } & Partial<RizztixUser>>("/user/editUser", {
+    method: "PUT",
+    body: input,
+  });
+  const session = getSession();
+  if (!session) throw new ApiError("Please sign in", 401);
+  const returned = data?.user ?? (data as Partial<RizztixUser>);
+  const nextUser: RizztixUser = {
+    ...session.user,
+    fullname: returned?.fullname ?? input.name,
+    phone: returned?.phone ?? input.phone,
+    email: returned?.email ?? input.email,
+    dob: returned?.dob ?? input.dob,
+  };
+  saveSession({ ...session, user: nextUser }); // non-silent → UI picks up the change
+  return nextUser;
+}
+
 /* ---------------- token refresh + authed fetch ---------------- */
 
 async function refreshSession(session: AuthSession): Promise<AuthSession | null> {

@@ -53,6 +53,7 @@ export default function TableBooking() {
   const [showFeeBreakdown, setShowFeeBreakdown] = useState(false);
   const [phase, setPhase] = useState<Phase>("map");
   const [men, setMen] = useState(0); // women = total − men
+  const [empref, setEmpref] = useState(""); // optional staff referral code
   const [error, setError] = useState("");
   const [guestQrs, setGuestQrs] = useState<TableGuestQr[] | null>(null);
   const [bookingRef, setBookingRef] = useState("");
@@ -201,6 +202,7 @@ export default function TableBooking() {
         femalePax: women,
         clubId,
         eventId,
+        empref,
         minimumSpend: quote.minimumSpend,
         depositAmount: quote.depositAmount,
         bookingFee: quote.bookingFee,
@@ -551,6 +553,21 @@ export default function TableBooking() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* optional staff / employee referral code */}
+            <div className="mt-4">
+              <label htmlFor="empref" className="label mb-1.5 block !text-[0.5625rem]">
+                Employee referral code <span className="!text-muted">(optional)</span>
+              </label>
+              <input
+                id="empref"
+                value={empref}
+                onChange={(e) => setEmpref(e.target.value.toUpperCase().slice(0, 32))}
+                placeholder="e.g. STAFF01"
+                autoCapitalize="characters"
+                className="w-full rounded-md border border-line bg-transparent px-3 py-2.5 text-base uppercase tracking-wide text-cream placeholder:normal-case placeholder:text-muted/50 focus:border-primary focus:outline-none sm:text-sm"
+              />
             </div>
 
             {/* quote */}
