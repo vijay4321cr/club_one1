@@ -11,9 +11,10 @@ import { useUpcomingEvents } from "@/lib/useUpcoming";
 const links = [
   { n: "01", label: "Home", href: "/" },
   { n: "02", label: "Events", href: "/event" },
-  { n: "03", label: "Our Services", href: "/services" },
-  { n: "04", label: "Contact Us", href: "/contact" },
-  { n: "05", label: "My Account", href: "/account" },
+  { n: "03", label: "Menu", href: "/menu" },
+  { n: "04", label: "Our Services", href: "/services" },
+  { n: "05", label: "Contact Us", href: "/contact" },
+  { n: "06", label: "My Account", href: "/account" },
 ];
 
 const legal = [

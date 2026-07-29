@@ -13,7 +13,7 @@ import { getSession, authFetch } from "@/lib/auth";
 /* ------------------------------------------------------------------ */
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rizztixapi.com";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rizztixapi.https://riztix-backend.onrender.comcom";
 export const CLUB_SLUG = process.env.NEXT_PUBLIC_CLUB_SLUG ?? "bhk-slug";
 
 /** Every Rizztix response is wrapped in { message, data }. */
@@ -31,7 +31,10 @@ async function apiGet<T>(path: string, revalidateSeconds = 60): Promise<T | null
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: revalidateSeconds },
+      // revalidateSeconds === 0 → always hit the network (used by live polling)
+      ...(revalidateSeconds === 0
+        ? { cache: "no-store" as RequestCache }
+        : { next: { revalidate: revalidateSeconds } }),
     });
     if (!res.ok) return null;
     const json = (await res.json()) as Envelope<T>;
@@ -68,6 +71,21 @@ export async function getRizztixUpcomingEvents(): Promise<UpcomingEventsResult> 
 export async function getRizztixEvent(id: string): Promise<RizztixEvent | undefined> {
   const { events } = await getRizztixUpcomingEvents();
   return events.find((e) => e._id === id);
+}
+
+/**
+ * Fresh (uncached) fetch of a single event — used to live-poll ticket price /
+ * availability on the event page so it reflects backend changes without a
+ * page refresh. Bypasses the browser cache.
+ */
+export async function getRizztixEventFresh(id: string): Promise<RizztixEvent | undefined> {
+  const data = await apiGet<{ totalCount: number; data: RizztixEvent[] }>(
+    `/event/upcoming?clubSlug=${CLUB_SLUG}`,
+    0
+  );
+  const ev = data?.data?.find((e) => e._id === id);
+  if (!ev) return undefined;
+  return { ...ev, isLive: +new Date(ev.startdatetime) <= Date.now() };
 }
 
 export async function getPastEvents(): Promise<ClubEvent[]> {
@@ -163,31 +181,92 @@ export async function getTicketDetails(ticketDocId: string): Promise<RizztixTick
   return Array.isArray(data) ? data : [];
 }
 
+/** unwrap the userTickets envelope into a flat list of raw ticket items */
+function ticketListFrom(data: unknown): Record<string, unknown>[] {
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  const d = (data ?? {}) as {
+    data?: unknown[];
+    tickets?: unknown[];
+    orders?: unknown[];
+  };
+  return (d.data ?? d.tickets ?? d.orders ?? []) as Record<string, unknown>[];
+}
+
+/**
+ * True when a userTickets row already carries its full detail (event info +
+ * a scannable QR). The live backend returns this, so no per-bundle detail
+ * call is needed; older/lighter responses fail this and fall back below.
+ */
+function isFullTicketDetail(item: Record<string, unknown>): boolean {
+  return (
+    !!item.eventDetails &&
+    !!(
+      item.qrstring ||
+      item.qrcode ||
+      item.qrcodeimage ||
+      (item.qrcodeimages as unknown[] | undefined)?.length ||
+      (item.passQrcodes as unknown[] | undefined)?.length
+    )
+  );
+}
+
 /**
  * All of the logged-in user's tickets, fully detailed.
- * userTickets lists ids → viewTicketsWithTicketId per id (each call returns
- * the whole order bundle, so results are deduped and covered ids skipped).
+ * `/order/userTickets?page=1` already returns every ticket unit with its QR and
+ * event details, so that single call is used directly. Any row that lacks inline
+ * detail (older backend) falls back to viewTicketsWithTicketId; results deduped.
  */
 export async function getAllTicketDetails(): Promise<RizztixTicketDetail[]> {
-  const data = await authFetch<unknown>("/order/userTickets?page=1");
-  const d = data as {
-    data?: { _id?: string }[];
-    tickets?: { _id?: string }[];
-    orders?: { _id?: string }[];
-  };
-  const list = Array.isArray(data)
-    ? (data as { _id?: string }[])
-    : d.data ?? d.tickets ?? d.orders ?? [];
+  const list = ticketListFrom(await authFetch<unknown>("/order/userTickets?page=1"));
 
   const details = new Map<string, RizztixTicketDetail>();
+  const needDetail: string[] = [];
   for (const item of list) {
-    if (!item._id || details.has(item._id)) continue;
+    const id = item._id as string | undefined;
+    if (!id) continue;
+    if (isFullTicketDetail(item)) details.set(id, item as unknown as RizztixTicketDetail);
+    else if (!details.has(id)) needDetail.push(id);
+  }
+
+  for (const id of needDetail) {
+    if (details.has(id)) continue; // already covered by a sibling bundle fetch
     try {
-      for (const t of await getTicketDetails(item._id)) {
-        if (t._id) details.set(t._id, t);
-      }
+      for (const t of await getTicketDetails(id)) if (t._id) details.set(t._id, t);
     } catch {
-      /* one broken ticket shouldn't hide the rest */
+      /* one broken bundle shouldn't hide the rest */
+    }
+  }
+  return [...details.values()];
+}
+
+/**
+ * Same as getAllTicketDetails, but calls `onUpdate` as data lands so the UI can
+ * render progressively. On the live backend the userTickets list is already
+ * complete, so this fires once immediately; on lighter backends it streams each
+ * fallback bundle as it resolves.
+ */
+export async function streamMyTickets(
+  onUpdate: (tickets: RizztixTicketDetail[]) => void
+): Promise<RizztixTicketDetail[]> {
+  const list = ticketListFrom(await authFetch<unknown>("/order/userTickets?page=1"));
+
+  const details = new Map<string, RizztixTicketDetail>();
+  const needDetail: string[] = [];
+  for (const item of list) {
+    const id = item._id as string | undefined;
+    if (!id) continue;
+    if (isFullTicketDetail(item)) details.set(id, item as unknown as RizztixTicketDetail);
+    else if (!details.has(id)) needDetail.push(id);
+  }
+  if (details.size) onUpdate([...details.values()]); // full list is usually ready now
+
+  for (const id of needDetail) {
+    if (details.has(id)) continue;
+    try {
+      for (const t of await getTicketDetails(id)) if (t._id) details.set(t._id, t);
+      onUpdate([...details.values()]);
+    } catch {
+      /* one broken bundle shouldn't hide the rest */
     }
   }
   return [...details.values()];

@@ -7,7 +7,7 @@ import TicketCard from "@/components/account/TicketCard";
 import TableBookingCard from "@/components/account/TableBookingCard";
 import { Input } from "@/components/ui/Input";
 import { logout, updateUser, ApiError } from "@/lib/auth";
-import { getAllTicketDetails } from "@/lib/api";
+import { streamMyTickets } from "@/lib/api";
 import { getMyTableBookings } from "@/lib/tableApi";
 import { useAuth } from "@/lib/useAuth";
 import type { RizztixTicketDetail, TableBooking } from "@/types";
@@ -113,26 +113,33 @@ export default function AccountPage() {
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const [all, tb] = await Promise.all([
-          getAllTicketDetails(),
-          getMyTableBookings().catch(() => []),
-        ]);
-        if (!cancelled) {
-          setTickets(all);
-          setTables(tb);
+
+    // tickets: one /order/userTickets call already carries QR + event details,
+    // so this resolves in a single round-trip (streams only if a legacy backend
+    // returns light rows). Runs in parallel with tables below.
+    streamMyTickets((partial) => {
+      if (!cancelled) setTickets([...partial]);
+    })
+      .then((all) => {
+        if (!cancelled) setTickets(all); // also resolves the empty case → []
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setTickets([]);
+        if (!(e instanceof ApiError && e.status === 401)) {
+          setError(e instanceof ApiError ? e.message : "Could not load your bookings.");
         }
-      } catch (e) {
-        if (!cancelled) {
-          setTickets([]);
-          setTables([]);
-          if (!(e instanceof ApiError && e.status === 401)) {
-            setError(e instanceof ApiError ? e.message : "Could not load your bookings.");
-          }
-        }
-      }
-    })();
+      });
+
+    // tables: separate source (/club/table-booking/booking/mine)
+    getMyTableBookings()
+      .then((t) => {
+        if (!cancelled) setTables(t);
+      })
+      .catch(() => {
+        if (!cancelled) setTables([]);
+      });
+
     return () => {
       cancelled = true;
     };
@@ -231,8 +238,8 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {groupTickets(tickets).map((g) => (
-                <TicketCard key={g.key} booking={g} onView={viewBooking} />
+              {groupTickets(tickets).map((g, i) => (
+                <TicketCard key={g.key} booking={g} onView={viewBooking} priority={i === 0} />
               ))}
             </div>
           )}

@@ -4,36 +4,55 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 /**
- * First-load intro overlay — counts 0→100 over the brand mark, then lifts away.
- * Shows once per browser session so internal reloads aren't nagged.
+ * First-paint intro overlay. It is rendered in the initial HTML (show=true) so
+ * it covers the page from the very first frame — no flash of the hero/logo/video
+ * behind it. The counter tracks REAL load progress: it creeps up while assets
+ * download and only completes once `window` has fully loaded (all images, the
+ * gallery, the hero video poster…), then lifts away. A 10s cap prevents hangs.
  */
 export default function PageLoader() {
   const [count, setCount] = useState(0);
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState(true);
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem("bhk:intro")) return;
-    setShow(true);
     document.body.style.overflow = "hidden";
+    let done = false;
+    let raf = 0;
+    let progress = 0;
 
-    let n = 0;
-    const tick = setInterval(() => {
-      n = Math.min(100, n + Math.floor(Math.random() * 9) + 4);
-      setCount(n);
-      if (n >= 100) {
-        clearInterval(tick);
-        sessionStorage.setItem("bhk:intro", "1");
-        setTimeout(() => setLeaving(true), 300);
-        setTimeout(() => {
-          setShow(false);
-          document.body.style.overflow = "";
-        }, 1100);
+    const finish = () => {
+      if (done) return;
+      done = true;
+      setCount(100);
+      setTimeout(() => setLeaving(true), 320);
+      setTimeout(() => {
+        setShow(false);
+        document.body.style.overflow = "";
+      }, 1150);
+    };
+
+    const tick = () => {
+      const complete = document.readyState === "complete";
+      // creep toward 92% while still loading; race to 100% once everything's in
+      const target = complete ? 100 : 92;
+      progress += (target - progress) * 0.05 + 0.35;
+      if (progress > 100) progress = 100;
+      setCount(Math.min(complete ? 100 : 99, Math.round(progress)));
+      if (complete && progress >= 99.5) {
+        finish();
+        return;
       }
-    }, 95);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    // hard guarantee we finish even if a big asset (e.g. video) stalls
+    const cap = window.setTimeout(finish, 10000);
 
     return () => {
-      clearInterval(tick);
+      cancelAnimationFrame(raf);
+      clearTimeout(cap);
       document.body.style.overflow = "";
     };
   }, []);
@@ -42,8 +61,8 @@ export default function PageLoader() {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-coal transition-all duration-700 ease-[cubic-bezier(0.76,0,0.24,1)] ${
-        leaving ? "pointer-events-none -translate-y-full" : "translate-y-0"
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-coal transition-transform duration-700 ease-[cubic-bezier(0.76,0,0.24,1)] ${
+        leaving ? "-translate-y-full" : "translate-y-0"
       }`}
     >
       <Image
@@ -55,13 +74,13 @@ export default function PageLoader() {
         className="h-24 w-auto md:h-28"
       />
 
-      {/* big counter */}
+      {/* big live counter */}
       <div className="mt-10 flex items-end gap-1">
         <span className="h-display text-6xl leading-none tabular-nums md:text-7xl">{count}</span>
         <span className="mb-1 font-display text-xl text-primary">%</span>
       </div>
 
-      {/* progress line */}
+      {/* progress line — tied to the real counter */}
       <div className="mt-6 h-px w-56 overflow-hidden bg-line md:w-72">
         <div
           className="h-full bg-primary transition-[width] duration-150 ease-out"

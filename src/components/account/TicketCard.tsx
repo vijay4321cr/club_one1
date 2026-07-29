@@ -7,10 +7,12 @@ import { eventDate } from "@/lib/format";
 interface Props {
   booking: TicketBooking;
   onView: (b: TicketBooking) => void;
+  /** eager-load the poster when it's the first (above-the-fold) card */
+  priority?: boolean;
 }
 
 /** One booking row: portrait poster + every ticket type/count, one View QRs button. */
-export default function TicketCard({ booking: b, onView }: Props) {
+export default function TicketCard({ booking: b, onView, priority = false }: Props) {
   const ev = b.tickets[0]?.eventDetails;
   const lines = ticketTypeLines(b.tickets);
   const qrCount = bookingSlides(b.tickets).length;
@@ -23,6 +25,7 @@ export default function TicketCard({ booking: b, onView }: Props) {
             src={ev.image}
             alt={`${ev.title ?? "Event"} poster`}
             fill
+            priority={priority}
             sizes="128px"
             className="object-cover"
           />

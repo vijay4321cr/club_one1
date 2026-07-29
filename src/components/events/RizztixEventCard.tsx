@@ -4,7 +4,14 @@ import type { RizztixEvent } from "@/types";
 import { inr, eventDate } from "@/lib/format";
 
 /** Event card for real box-office events from the Rizztix API. */
-export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
+export default function RizztixEventCard({
+  event,
+  priority = false,
+}: {
+  event: RizztixEvent;
+  /** eager-load the poster when it's above the fold (LCP) */
+  priority?: boolean;
+}) {
   const fromPrice = event.tickets.length
     ? Math.min(...event.tickets.map((t) => t.ticketprice))
     : undefined;
@@ -23,6 +30,7 @@ export default function RizztixEventCard({ event }: { event: RizztixEvent }) {
             src={event.image}
             alt={`${event.title} poster`}
             fill
+            priority={priority}
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
             className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           />

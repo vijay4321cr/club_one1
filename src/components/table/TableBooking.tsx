@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
@@ -23,6 +23,18 @@ import { inr, inrExact } from "@/lib/format";
 import type { TableLayout, TableZone, TableSpot, TableGuestQr } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** signature of a layout's availability-driving fields — skip re-renders when
+ *  a poll returns identical data (keeps the map smooth) */
+const layoutSig = (l: TableLayout) =>
+  JSON.stringify(
+    l.areas.map((a) => [
+      a._id,
+      a.pinColor,
+      a.selectable,
+      (a.tables ?? []).map((t) => [t._id, t.pinColor, t.selectable, t.tablesLeft]),
+    ])
+  );
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 type Phase = "map" | "details" | "paying" | "confirming" | "done";
@@ -38,12 +50,15 @@ export default function TableBooking() {
   // service night: default to the soonest valid night (today, else event start)
   const [serviceDate, setServiceDate] = useState("");
   const [slotKey, setSlotKey] = useState("");
+  const [viewkey, setViewkey] = useState<string | undefined>();
   const [layout, setLayout] = useState<TableLayout | null>(null);
+  const layoutSigRef = useRef(""); // last-seen availability signature (poll de-dupe)
   const [depositPercent, setDepositPercent] = useState(50);
   const [clubId, setClubId] = useState<string | undefined>();
   const [loadingMap, setLoadingMap] = useState(false);
   const [mapError, setMapError] = useState("");
   const [mapReady, setMapReady] = useState(false); // scene image decoded
+  const [guideActive, setGuideActive] = useState(false); // interactive tour running
 
   // one or more tables, each with its own party size
   const [selected, setSelected] = useState<
@@ -117,7 +132,9 @@ export default function TableBooking() {
       if (cancelled) return;
       const first = lay?.layouts?.[0] ?? null;
       setSlotKey(key);
+      setViewkey(viewkey);
       setLayout(first);
+      layoutSigRef.current = first ? layoutSig(first) : "";
       setDepositPercent(lay?.depositPercent ?? 50);
       setClubId(lay?.clubId);
       if (!first) setMapError("Floor plan unavailable for this night.");
@@ -127,6 +144,43 @@ export default function TableBooking() {
       cancelled = true;
     };
   }, [serviceDate, eventId, event]);
+
+  // live-refresh the floor plan so table/zone colours reflect availability in
+  // real time (green → red/yellow) while the guest is choosing — no refresh.
+  // paused during checkout (sheet open / paying / done) so nothing yanks mid-flow.
+  useEffect(() => {
+    if (!serviceDate || !slotKey || !eventId) return;
+    if (guideActive || showModal || phase === "paying" || phase === "confirming" || phase === "done")
+      return;
+    let cancelled = false;
+    const poll = async () => {
+      if (document.visibilityState === "hidden") return;
+      const lay = await getTableLayouts({ serviceDate, slotKey, eventId, viewkey });
+      const fresh = lay?.layouts?.[0];
+      if (cancelled || !fresh) return;
+      const sig = layoutSig(fresh);
+      if (sig === layoutSigRef.current) return; // unchanged → skip re-render
+      layoutSigRef.current = sig;
+      setLayout(fresh);
+      // refresh kept tables from fresh data; drop any that just became unavailable
+      setSelected((prev) =>
+        prev.flatMap((x) => {
+          const z = fresh.areas.find((a) => a._id === x.zone._id);
+          const t = z?.tables?.find((tt) => tt._id === x.table._id);
+          if (!z || !t || t.pinColor !== "green" || t.selectable === false) return [];
+          return [{ ...x, zone: z, table: t }];
+        })
+      );
+    };
+    const id = window.setInterval(poll, 5_000);
+    const onVis = () => document.visibilityState === "visible" && poll();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [serviceDate, slotKey, eventId, viewkey, showModal, phase, guideActive]);
 
   const partySize = selected.reduce((s, x) => s + x.pax, 0);
   const menCount = Math.min(men, partySize);
@@ -407,7 +461,12 @@ export default function TableBooking() {
       ) : (
         // full-bleed + tall on mobile; boxed on desktop
         <div className="mt-8 -mx-5 sm:mx-0">
-          <FloorMap layout={layout} selectedIds={selectedIds} onToggle={toggleTable} />
+          <FloorMap
+            layout={layout}
+            selectedIds={selectedIds}
+            onToggle={toggleTable}
+            onGuideActive={setGuideActive}
+          />
         </div>
       )}
 
@@ -418,7 +477,6 @@ export default function TableBooking() {
             <div className="min-w-0">
               <p className="truncate font-display text-sm font-medium uppercase">
                 {selected.length} table{selected.length > 1 ? "s" : ""} ·{" "}
-                <span className="text-gold">{selected[0].zone.label}</span> ·{" "}
                 {selected.map((x) => x.table.label).join(", ")}
               </p>
               <p className="truncate text-xs text-muted">
@@ -629,6 +687,17 @@ export default function TableBooking() {
                 {inrExact(quote.minimumSpend - quote.depositAmount)} balance is redeemable at the venue.
               </p>
             </dl>
+
+            {/* T&C — same as ticket checkout; opens in a new tab so the sheet stays put */}
+            <a
+              href="/legal/terms"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 flex items-center justify-between gap-2 rounded-md border border-line p-3 text-[0.6875rem] font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
+            >
+              Terms and conditions
+              <span aria-hidden className="no-underline">↗</span>
+            </a>
 
             {error && <p className="mt-3 text-sm text-primary">{error}</p>}
 

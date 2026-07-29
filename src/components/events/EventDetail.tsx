@@ -140,10 +140,38 @@ export default function EventDetail() {
         </div>
       )}
 
+      {/* about this event (from the box office) */}
+      {event.aboutevent?.trim() && (
+        <div className="mt-14 border-t border-line pt-10 md:mt-20 md:pt-14">
+          <FxReveal effect="wipe">
+            <p className="label mb-4">About the event</p>
+          </FxReveal>
+          <Reveal>
+            <p className="max-w-3xl whitespace-pre-line text-sm leading-relaxed text-cream/80 md:text-base">
+              {event.aboutevent}
+            </p>
+          </Reveal>
+        </div>
+      )}
+
       {/* tickets — full on-site purchase (login → pay → confirm) */}
       <section ref={ticketsRef} id="tickets" className="scroll-mt-24 mt-14 md:mt-20">
         <TicketPurchase event={event} />
       </section>
+
+      {/* event terms & conditions */}
+      {event.terms?.trim() && (
+        <div className="mt-14 border-t border-line pt-10 md:mt-20 md:pt-14">
+          <FxReveal effect="wipe">
+            <p className="label mb-4">Terms &amp; Conditions</p>
+          </FxReveal>
+          <Reveal>
+            <p className="max-w-3xl whitespace-pre-line text-xs leading-relaxed text-muted md:text-sm">
+              {event.terms}
+            </p>
+          </Reveal>
+        </div>
+      )}
     </div>
   );
 }

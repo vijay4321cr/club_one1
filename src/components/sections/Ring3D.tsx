@@ -36,6 +36,7 @@ function Ring({ items, entrance, onFront }: RingProps) {
   const viewport = useThree((s) => s.viewport);
   const control = useRef<Control>({ value: 0, target: 0, dragging: false, lastX: 0 });
   const lastFront = useRef(-1);
+  const planeRefs = useRef<(THREE.Group | null)[]>([]);
   const step = (Math.PI * 2) / items.length;
 
   // drag-to-spin on the canvas; vertical touch still scrolls (touch-action: pan-y)
@@ -83,6 +84,14 @@ function Ring({ items, entrance, onFront }: RingProps) {
       lastFront.current = idx;
       onFront(idx);
     }
+
+    // gently grow whichever poster is facing front, shrink the rest
+    planeRefs.current.forEach((p, i) => {
+      if (!p) return;
+      const target = i === idx ? 1.16 : 1;
+      const next = p.scale.x + (target - p.scale.x) * Math.min(1, d * 8);
+      p.scale.setScalar(next);
+    });
   });
 
   return (
@@ -91,6 +100,9 @@ function Ring({ items, entrance, onFront }: RingProps) {
         {items.map((g, i) => (
           <group
             key={g.id}
+            ref={(el) => {
+              planeRefs.current[i] = el;
+            }}
             position={[Math.sin(i * step) * 2.7, 0, Math.cos(i * step) * 2.7]}
             rotation={[0, i * step, i % 2 ? 0.05 : -0.05]}
           >

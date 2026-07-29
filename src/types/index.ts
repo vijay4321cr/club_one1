@@ -80,6 +80,8 @@ export interface RizztixEvent {
   bookingstart?: string;
   bookingend?: string;
   image: string;
+  aboutevent?: string;
+  terms?: string;
   tickets: RizztixTicket[];
   artistsDetails?: RizztixArtist[];
   genre?: { _id: string; title: string }[];

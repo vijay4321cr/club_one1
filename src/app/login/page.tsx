@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { requestOtp, resendOtp, verifyOtp, ApiError, type NewUserDetails } from "@/lib/auth";
+import { useAuth } from "@/lib/useAuth";
 
 type Step = "phone" | "details" | "otp";
 
@@ -12,6 +13,14 @@ function LoginFlow() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") ?? "/account";
+  const { session, loading } = useAuth();
+
+  // Already signed in (or just signed in) → leave the auth screen for good.
+  // `replace` (here and after verify) keeps /login out of history, so pressing
+  // Back never restores the phone/OTP screen (or flashes it from bfcache).
+  useEffect(() => {
+    if (session) router.replace(next);
+  }, [session, next, router]);
 
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
@@ -70,12 +79,16 @@ function LoginFlow() {
     setError("");
     try {
       await verifyOtp(phone, otp.trim());
-      router.push(next);
+      router.replace(next);
     } catch (err) {
       fail(err);
       setBusy(false);
     }
   };
+
+  // don't paint the auth UI while reading the session or for a signed-in user
+  // (prevents the OTP/phone screen flashing on Back navigation)
+  if (loading || session) return <div className="min-h-svh" />;
 
   return (
     <div className="mx-auto flex min-h-svh max-w-md flex-col justify-center px-5 py-28">

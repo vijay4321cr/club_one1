@@ -55,8 +55,9 @@ export default function QrSlider({
 
   return (
     <div>
-      {/* category tabs — the stub appears to drop out of the one you tap */}
-      {tabs.length > 1 && (
+      {/* category tabs — the stub appears to drop out of the one you tap;
+          a single labelled category still shows as a badge (its type × count) */}
+      {(tabs.length > 1 || !!tabs[0].label) && (
         <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
           {tabs.map((g, k) => (
             <button
@@ -72,7 +73,7 @@ export default function QrSlider({
               }`}
             >
               {g.label}
-              <span className="ml-1.5 opacity-70">{g.slides.length}</span>
+              <span className="ml-1.5 opacity-70">× {g.slides.length}</span>
             </button>
           ))}
         </div>
@@ -146,7 +147,7 @@ export default function QrSlider({
                     {/* light-background logo (red 2 + black BHK) sits directly on the stub */}
                     {logoOk ? (
                       <Image
-                        src="/2bhk_alfresco.png"
+                        src="/icon.png"
                         alt="2BHK — Bar Hauté Kitchen"
                         width={56}
                         height={58}

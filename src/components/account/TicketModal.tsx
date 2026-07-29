@@ -141,7 +141,6 @@ export default function TicketModal({ booking, onClose }: Props) {
   const first = tickets[0];
   const ev = first?.eventDetails;
   const groups = bookingGroups(tickets);
-  const lines = ticketTypeLines(tickets);
   const total = tickets.reduce((s, t) => s + (t.ticketprice ?? 0) * (t.noofticket ?? 1), 0);
 
   /* open animation */
@@ -228,18 +227,13 @@ export default function TicketModal({ booking, onClose }: Props) {
           </button>
         </div>
 
-        {/* booking meta — every ticket type + count, and the total */}
-        <div className="tm-stagger flex flex-wrap items-center gap-2 px-5 pt-4">
-          {lines.map((l) => (
-            <span
-              key={l.type}
-              className="rounded-full border border-primary/50 bg-primary/15 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-primary"
-            >
-              {l.type} × {l.count}
-            </span>
-          ))}
-          {total > 0 && <span className="ml-auto font-display text-lg">{inr(total)}</span>}
-        </div>
+        {/* booking meta — total paid (ticket types now live on the QR tabs below) */}
+        {total > 0 && (
+          <div className="tm-stagger flex items-center justify-between gap-2 px-5 pt-4">
+            <span className="label !text-[0.5625rem] !text-muted">Total paid</span>
+            <span className="font-display text-lg">{inr(total)}</span>
+          </div>
+        )}
 
         {/* every pass QR across the booking */}
         <div className="tm-stagger p-5">

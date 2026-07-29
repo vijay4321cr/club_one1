@@ -4,16 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
-import TransitionLink from "@/components/ui/TransitionLink";
 import QrSlider from "@/components/account/QrSlider";
 import { bookingSlides, bookingGroups } from "@/components/account/TicketModal";
 import { authFetch, ApiError } from "@/lib/auth";
-import { getAllTicketDetails } from "@/lib/api";
+import { getAllTicketDetails, getRizztixEventFresh } from "@/lib/api";
 import { openCheckout } from "@/lib/payment";
 import { useAuth } from "@/lib/useAuth";
 import { inr, inrExact, eventDateLong } from "@/lib/format";
 import type {
   RizztixEvent,
+  RizztixTicket,
   RizztixOrder,
   RizztixConfirm,
   RizztixTicketLine,
@@ -21,6 +21,13 @@ import type {
 } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** compact signature of the live-changing ticket fields — used to skip
+ *  re-renders when a poll returns identical data */
+const ticketSig = (e: RizztixEvent) =>
+  JSON.stringify(
+    e.tickets.map((t) => [t._id, t.ticketprice, t.ticketssold, t.totaltickets, t.soldout, t.ticketstatus])
+  );
 
 /**
  * Ticket descriptions arrive semicolon-separated and sometimes repeated
@@ -52,6 +59,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
   const router = useRouter();
   const { session } = useAuth();
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const [showConfirm, setShowConfirm] = useState(false);
   const [showFeeBreakdown, setShowFeeBreakdown] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -63,6 +71,14 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
   const [notOpenMsg, setNotOpenMsg] = useState("");
   const successRef = useRef<HTMLDivElement>(null);
 
+  // live event data — refreshed by polling so price/availability stay current
+  const [liveEvent, setLiveEvent] = useState(event);
+  const ticketSigRef = useRef(ticketSig(event));
+  const ev = liveEvent;
+  // per-ticket "only N available" notice shown when a stepper hits its cap
+  const [notice, setNotice] = useState<Record<string, string>>({});
+  const avail = (t: RizztixTicket) => Math.max(0, (t.totaltickets ?? 0) - (t.ticketssold ?? 0));
+
   /* sales not open yet — from the event's booking window, or from the API reply.
      ticks so the CTA unblocks on its own the moment sales open */
   const [now, setNow] = useState<number | null>(null);
@@ -72,15 +88,55 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
     return () => window.clearInterval(id);
   }, []);
 
+  // live-poll this event's ticket price + availability (no page refresh needed)
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      if (document.visibilityState === "hidden") return;
+      const fresh = await getRizztixEventFresh(event._id);
+      if (cancelled || !fresh) return;
+      const sig = ticketSig(fresh);
+      if (sig === ticketSigRef.current) return; // unchanged → no re-render
+      ticketSigRef.current = sig;
+      setLiveEvent(fresh);
+    };
+    poll(); // immediate freshen on mount (initial data may be up to ~1 min old)
+    const id = window.setInterval(poll, 5_000);
+    const onVis = () => document.visibilityState === "visible" && poll();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [event._id]);
+
+  // if live availability drops below what's already in the cart, trim it
+  useEffect(() => {
+    setQty((q) => {
+      let changed = false;
+      const next = { ...q };
+      for (const t of ev.tickets) {
+        const a = avail(t);
+        if ((next[t._id] ?? 0) > a) {
+          next[t._id] = a;
+          changed = true;
+        }
+      }
+      return changed ? next : q;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveEvent]);
+
   const notStartedYet =
-    !!event.bookingstart && now !== null && new Date(event.bookingstart).getTime() > now;
+    !!ev.bookingstart && now !== null && new Date(ev.bookingstart).getTime() > now;
   const bookingBlocked = notStartedYet || !!notOpenMsg;
   const blockedLabel = notOpenMsg || "Booking has not started yet. Please try again later.";
 
   /* ---- selection + totals (fee math mirrors the backend payload) ---- */
   const lines: RizztixTicketLine[] = useMemo(
     () =>
-      event.tickets
+      ev.tickets
         .filter((t) => (qty[t._id] ?? 0) > 0)
         .map((t) => ({
           tickettypeid: t._id,
@@ -88,11 +144,11 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
           quantity: qty[t._id],
           ticketprice: t.ticketprice,
         })),
-    [event.tickets, qty]
+    [ev.tickets, qty]
   );
   const totalQty = lines.reduce((s, l) => s + l.quantity, 0);
   const subtotal = lines.reduce((s, l) => s + l.quantity * l.ticketprice, 0);
-  const feePercent = event.bookingpercentage ?? 0;
+  const feePercent = ev.bookingpercentage ?? 0;
   const baseprice = round2((subtotal * feePercent) / 100); // fee before GST
   const bookingFee = round2(baseprice * 1.18); // fee incl. 18% GST
   const total = round2(subtotal + bookingFee);
@@ -169,8 +225,21 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
     };
   }, [success]);
 
-  const setCount = (id: string, n: number) =>
-    setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(10, n)) }));
+  const setCount = (t: RizztixTicket, n: number) => {
+    const a = avail(t);
+    const hardMax = Math.min(a, 10); // never more than what's left, max 10 per order
+    const capped = Math.max(0, Math.min(hardMax, n));
+    const msg =
+      n > capped
+        ? a <= 0
+          ? "Sold out"
+          : a <= 10
+            ? `Only ${a} ticket${a === 1 ? "" : "s"} available`
+            : "Max 10 tickets per order"
+        : "";
+    setNotice((m) => (m[t._id] === msg ? m : { ...m, [t._id]: msg }));
+    setQty((q) => ({ ...q, [t._id]: capped }));
+  };
 
   /* remember we were mid-checkout so returning re-opens the popup with the cart */
   const rememberCheckout = () => {
@@ -322,8 +391,10 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
           <p className="label mb-3 !text-primary">Booking confirmed</p>
           <h3 className="h-display text-3xl md:text-4xl">See you on the floor.</h3>
           <p className="mt-3 text-sm text-muted">
-            {success.lines.map((l) => `${l.tickettype} × ${l.quantity}`).join(" · ")} ·{" "}
-            {inr(success.amount)} · Ref <span className="text-cream">{success.bookingref}</span>
+            {/* ticket price excluding booking fee + GST (matches the emailed ticket);
+                the ticket-type breakdown now shows on the QR tabs below */}
+            {inr(success.lines.reduce((s, l) => s + l.ticketprice * l.quantity, 0))} · Ref{" "}
+            <span className="text-cream">{success.bookingref}</span>
           </p>
 
           {/* entry QR codes — same sliding stub cards as My Account */}
@@ -360,17 +431,19 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
       <Reveal>
         <div className="mb-6 flex items-baseline justify-between border-b border-line pb-4">
           <p className="label">Tickets</p>
-          {event.bookingend && (
+          {ev.bookingend && (
             <p className="hidden text-xs text-muted md:block">
-              Booking closes {eventDateLong(event.bookingend)}
+              Booking closes {eventDateLong(ev.bookingend)}
             </p>
           )}
         </div>
       </Reveal>
 
       <div className="divide-y divide-line">
-        {event.tickets.map((t, i) => {
-          const unavailable = t.soldout || t.ticketstatus.toUpperCase() !== "AVAILABLE";
+        {ev.tickets.map((t, i) => {
+          const available = avail(t);
+          const unavailable =
+            t.soldout || t.ticketstatus.toUpperCase() !== "AVAILABLE" || available <= 0;
           const n = qty[t._id] ?? 0;
           return (
             <Reveal key={t._id} delay={i * 0.06}>
@@ -385,16 +458,43 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                       ...(t.passesPerUnit > 1 ? [`Admits ${t.passesPerUnit}`] : []),
                       ...(t.coverAmount > 0 ? [`${inr(t.coverAmount)} cover included`] : []),
                     ];
-                    return points.length ? (
-                      <ul className="mt-2 space-y-1">
-                        {points.map((p, k) => (
-                          <li key={k} className="flex gap-2 text-sm text-muted">
-                            <span className="mt-[0.15rem] text-primary">•</span>
-                            <span>{p}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null;
+                    if (!points.length) return null;
+                    const open = !!openDetails[t._id];
+                    return (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setOpenDetails((d) => ({ ...d, [t._id]: !d[t._id] }))}
+                          aria-expanded={open}
+                          className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.12em] text-muted transition-colors hover:text-cream"
+                        >
+                          Details
+                          <span
+                            className={`inline-block text-[0.6rem] transition-transform duration-300 ${
+                              open ? "rotate-180" : ""
+                            }`}
+                          >
+                            ▾
+                          </span>
+                        </button>
+                        <div
+                          className={`grid transition-all duration-300 ${
+                            open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                          }`}
+                        >
+                          <div className="overflow-hidden">
+                            <ul className="mt-2 space-y-1">
+                              {points.map((p, k) => (
+                                <li key={k} className="flex gap-2 text-sm text-muted">
+                                  <span className="mt-[0.15rem] text-primary">•</span>
+                                  <span>{p}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    );
                   })()}
                 </div>
 
@@ -403,32 +503,40 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                     Sold out
                   </span>
                 ) : (
-                  <div className="flex shrink-0 items-center gap-5">
-                    <span className="h-display w-24 text-right text-xl md:text-2xl">
-                      {inr(n > 0 ? t.ticketprice * n : t.ticketprice)}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setCount(t._id, n - 1)}
-                        disabled={n === 0}
-                        aria-label={`Fewer ${t.tickettype} tickets`}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
-                      >
-                        −
-                      </button>
-                      <span className="w-5 text-center font-display text-lg tabular-nums">
-                        {n}
+                  <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
+                    <div className="flex items-center gap-5">
+                      <span className="h-display w-24 text-right text-xl md:text-2xl">
+                        {inr(t.ticketprice)}
                       </span>
-                      <button
-                        onClick={() => setCount(t._id, n + 1)}
-                        aria-label={`More ${t.tickettype} tickets`}
-                        className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-cream ${
-                          n > 0 ? "border-primary text-primary" : "border-line"
-                        }`}
-                      >
-                        +
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setCount(t, n - 1)}
+                          disabled={n === 0}
+                          aria-label={`Fewer ${t.tickettype} tickets`}
+                          className="flex h-9 w-9 items-center justify-center rounded-full border border-line transition-colors enabled:hover:border-cream disabled:opacity-40"
+                        >
+                          −
+                        </button>
+                        <span className="w-5 text-center font-display text-lg tabular-nums">{n}</span>
+                        <button
+                          onClick={() => setCount(t, n + 1)}
+                          aria-label={`More ${t.tickettype} tickets`}
+                          className={`flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:border-cream ${
+                            n > 0 ? "border-primary text-primary" : "border-line"
+                          }`}
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
+                    {/* live availability feedback */}
+                    {notice[t._id] ? (
+                      <p className="text-xs font-medium text-primary">{notice[t._id]}</p>
+                    ) : available <= 5 ? (
+                      <p className="text-xs text-gold">
+                        Only {available} ticket{available === 1 ? "" : "s"} left
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -573,15 +681,17 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               </div>
             </div>
 
-            {/* T&C — same-tab; we remember the checkout so Back re-opens this popup */}
-            <TransitionLink
+            {/* T&C — opens in a new tab so this confirmation popup stays open
+                until the user closes it themselves (no navigation teardown) */}
+            <a
               href="/legal/terms"
-              onNavigate={rememberCheckout}
+              target="_blank"
+              rel="noopener noreferrer"
               className="mt-4 flex items-center justify-between gap-2 rounded-md border border-line p-4 text-xs font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
             >
               Terms and conditions
-              <span aria-hidden className="no-underline">→</span>
-            </TransitionLink>
+              <span aria-hidden className="no-underline">↗</span>
+            </a>
 
             {error && <p className="mt-4 text-sm text-primary">{error}</p>}
 
@@ -590,16 +700,16 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               <button
                 onClick={() => setShowConfirm(false)}
                 disabled={paying}
-                className="rounded-full border border-cream/60 py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors hover:bg-cream hover:text-coal disabled:opacity-50"
+                className="flex items-center justify-center whitespace-nowrap rounded-full border border-cream/60 px-2 py-3.5 text-xs font-medium uppercase tracking-[0.1em] text-cream transition-colors hover:bg-cream hover:text-coal disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={pay}
                 disabled={paying}
-                className="rounded-full bg-cream py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-coal transition-colors hover:bg-primary hover:text-cream disabled:opacity-60"
+                className="flex items-center justify-center whitespace-nowrap rounded-full bg-cream px-2 py-3.5 text-xs font-medium uppercase tracking-[0.1em] text-coal transition-colors hover:bg-primary hover:text-cream disabled:opacity-60"
               >
-                {paying ? "Opening…" : "Yes, continue →"}
+                {paying ? "Opening…" : "Continue →"}
               </button>
             </div>
           </div>

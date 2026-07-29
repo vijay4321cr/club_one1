@@ -136,7 +136,7 @@ export default function UpcomingGrid({ label, title, homeGrid }: Props) {
               delay={(i % 3) * 0.08}
               className="h-full"
             >
-              <RizztixEventCard event={e} />
+              <RizztixEventCard event={e} priority={i === 0} />
             </FxReveal>
           ))}
         </div>

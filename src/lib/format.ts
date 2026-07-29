@@ -15,6 +15,13 @@ export const inrExact = (n: number) =>
     maximumFractionDigits: 2,
   }).format(n);
 
+/** compact rupees for tight labels — ₹400, ₹1k, ₹1.5k, ₹2k (≥1000 → k). */
+export const inrCompact = (n: number) => {
+  if (n < 1000) return `₹${Math.round(n)}`;
+  const k = n / 1000;
+  return `₹${Number.isInteger(k) ? k : k.toFixed(1)}k`;
+};
+
 export const eventDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-IN", {
     weekday: "short",

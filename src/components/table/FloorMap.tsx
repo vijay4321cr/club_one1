@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import MapGuide from "@/components/table/MapGuide";
-import { inr } from "@/lib/format";
+import MapGuide, { type GuideDriver } from "@/components/table/MapGuide";
+import { inrCompact } from "@/lib/format";
 import type { TableLayout, TableZone, TableSpot } from "@/types";
 
 const GUIDE_KEY = "bhk:map-guide-seen";
@@ -11,17 +11,22 @@ interface Props {
   layout: TableLayout;
   selectedIds: string[];
   onToggle: (zone: TableZone, table: TableSpot) => void;
+  /** true while the interactive walkthrough is running — parent pauses polling */
+  onGuideActive?: (active: boolean) => void;
 }
 
 type View = { s: number; tx: number; ty: number; min: number; max: number };
 
 const TAP_SLOP = 8; // px of movement below which a pointer up counts as a tap
 
-export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
+export default function FloorMap({ layout, selectedIds, onToggle, onGuideActive }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
 
   const [showGuide, setShowGuide] = useState(false);
+  // demo overrides driven by the walkthrough (don't touch the real booking)
+  const [demoSelected, setDemoSelected] = useState<string | null>(null);
+  const [demoUnavail, setDemoUnavail] = useState<string | null>(null);
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [natSize, setNatSize] = useState({ w: 0, h: 0 }); // render-safe copy of nat ref
@@ -146,12 +151,20 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
 
   const closeGuide = () => {
     setShowGuide(false);
+    setDemoSelected(null);
+    setDemoUnavail(null);
+    backToOverview();
     try {
       localStorage.setItem(GUIDE_KEY, "1");
     } catch {
       /* ignore */
     }
   };
+
+  // let the parent pause live polling while the walkthrough is on screen
+  useEffect(() => {
+    onGuideActive?.(showGuide);
+  }, [showGuide, onGuideActive]);
 
   /* refit on resize — keep the focused zone framed */
   useEffect(() => {
@@ -264,6 +277,28 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
     if (zone) backToOverview();
   };
 
+  /* interactive-tour driver — lets MapGuide move the REAL map + fake a live
+     availability change, without touching the actual booking selection */
+  const guideZones = layout.areas.filter((z) => !!z.tables?.length && z.selectable !== false);
+  const demoZone = guideZones.find((z) => z.tables?.some((t) => t.pinColor === "green")) ?? guideZones[0];
+  const demoTableId =
+    demoZone?.tables?.find((t) => t.pinColor === "green")?._id ?? demoZone?.tables?.[0]?._id ?? null;
+  const demoZone2 = guideZones.find((z) => z._id !== demoZone?._id) ?? demoZone;
+  const guideDriver: GuideDriver = {
+    overview: () => backToOverview(),
+    openZone: (id) => {
+      const z = layout.areas.find((a) => a._id === id);
+      if (z) focusZone(z);
+    },
+    select: (id) => setDemoSelected(id),
+    markUnavailable: (id) => setDemoUnavail(id),
+    demoZoneId: demoZone?._id ?? null,
+    demoZoneLabel: demoZone?.label ?? "this zone",
+    demoTableId,
+    demoZone2Id: demoZone2?._id ?? null,
+    demoZone2Label: demoZone2?.label ?? "a zone",
+  };
+
   // overview → one dot per zone; focused → that zone's table dots
   const spots: { spot: TableSpot; z: TableZone; isZoneDot: boolean }[] = zone
     ? zone.tables?.length
@@ -363,10 +398,11 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                 const hasSel = zonesWithSelection.has(z._id);
                 const hasAvailable = !!z.tables?.some((t) => t.pinColor === "green");
                 const hasSoldOut = !!z.tables?.some((t) => t.pinColor === "red");
+                const demoRed = demoUnavail === z._id; // walkthrough "just sold out" flash
                 // none available + some booked → sold out (red)
-                const soldOut = !!z.tables?.length && !hasAvailable && hasSoldOut;
+                const soldOut = demoRed || (!!z.tables?.length && !hasAvailable && hasSoldOut);
                 // none available + none booked → the whole zone is unavailable (yellow)
-                const allUnavailable = !!z.tables?.length && !hasAvailable && !hasSoldOut;
+                const allUnavailable = !demoRed && !!z.tables?.length && !hasAvailable && !hasSoldOut;
                 const clickable = z.selectable !== false && !!z.tables?.length;
                 // priority: green (picked) → red (sold out) → yellow (unavailable) → white (viewing)
                 const animatedWhite = focused && !hasSel && !soldOut && !allUnavailable;
@@ -426,7 +462,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
           {/* pins — one dot per zone in overview; that zone's tables when focused */}
           {natSize.w > 0 &&
             spots.map(({ spot, z, isZoneDot }) => {
-              const isSel = selectedSet.has(spot._id);
+              const isSel = selectedSet.has(spot._id) || demoSelected === spot._id;
               // a table in another zone is locked once a pick exists (one-zone rule)
               const zoneLocked = !isZoneDot && !!activeZoneId && z._id !== activeZoneId;
               const clickable = spot.selectable !== false && !zoneLocked;
@@ -457,6 +493,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                     transformOrigin: "center",
                     zIndex: emphasised ? 3 : 1,
                   }}
+                  data-spot-id={spot._id}
                   aria-label={spot.label}
                 >
                   <span className="relative flex items-center justify-center">
@@ -519,7 +556,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
                         </>
                       ) : (
                         <>
-                          From {inr(spot.priceFromPerPerson)}/pax · {spot.maxPartySize} pax
+                          From {inrCompact(spot.priceFromPerPerson)}/pax · {spot.maxPartySize} pax
                         </>
                       )}
                     </span>
@@ -528,6 +565,18 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
               );
             })}
         </div>
+
+        {/* zone-name popup — shown when a zone is opened (zoomed in), top-centre */}
+        {zone && (
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[52%] -translate-x-1/2 justify-center">
+            <div className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 shadow-lg shadow-black/50">
+              <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-cream" />
+              <p className="truncate text-[0.625rem] font-bold uppercase tracking-[0.14em] text-cream">
+                {zone.label}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* loader — spinner over a shimmer until the plan is measured & framed */}
         {!ready && (
@@ -542,7 +591,7 @@ export default function FloorMap({ layout, selectedIds, onToggle }: Props) {
         )}
 
         {/* first-run walkthrough (re-openable from the ? button) */}
-        {showGuide && ready && <MapGuide onClose={closeGuide} />}
+        {showGuide && ready && <MapGuide driver={guideDriver} onClose={closeGuide} />}
       </div>
 
       <p className="mt-3 px-5 text-center text-xs text-muted sm:px-0">

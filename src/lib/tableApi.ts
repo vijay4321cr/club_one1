@@ -12,6 +12,7 @@ import type {
   TableInitResult,
   TableBooking,
   TableGuestQr,
+  RizztixTicketDetail,
 } from "@/types";
 
 interface Envelope<T> {
@@ -19,10 +20,14 @@ interface Envelope<T> {
   data?: T;
 }
 
-/** public GET (no auth) with envelope unwrap; null on failure */
+/** public GET (no auth) with envelope unwrap; null on failure.
+ *  Uncached so live-polling the floor plan always gets current availability. */
 async function publicGet<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Accept: "application/json" } });
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
     if (!res.ok) return null;
     const json = (await res.json()) as Envelope<T>;
     return json.data ?? null;
@@ -213,6 +218,79 @@ export function groupTableBookings(list: TableBooking[]): TableBooking[] {
 export async function getMyTableBookings(): Promise<TableBooking[]> {
   const data = await authFetch<{ bookings?: TableBooking[] }>("/club/table-booking/booking/mine");
   return groupTableBookings(data?.bookings ?? []);
+}
+
+/* ---- combined "my bookings": one call returns tickets + tables ---- */
+
+type Raw = Record<string, unknown>;
+const has = (o: Raw, k: string) => o[k] !== undefined && o[k] !== null;
+// table records carry seating/layout fields; ticket records carry ticket fields
+const looksTable = (o: Raw) =>
+  has(o, "layoutId") ||
+  has(o, "areaId") ||
+  has(o, "areaIds") ||
+  has(o, "tableCount") ||
+  has(o, "guestQrcodes") ||
+  has(o, "slotKey") ||
+  has(o, "depositAmount");
+const looksTicket = (o: Raw) =>
+  has(o, "tickettype") ||
+  has(o, "passQrcodes") ||
+  has(o, "ticketlines") ||
+  has(o, "tickettypeid") ||
+  has(o, "noofticket") ||
+  has(o, "eventDetails");
+
+export interface MyBookings {
+  ticketBookings: RizztixTicketDetail[];
+  tableBookings: TableBooking[];
+}
+
+/**
+ * Single-call "everything I've booked" from `/club/table-booking/booking/mine`.
+ * Handles both an already-split response ({ticketBookings,tableBookings}) and a
+ * mixed list, classifying each item by its fields. Unknown items default to
+ * "table" so the current table-only behaviour is preserved on older backends.
+ */
+export async function getMyBookings(): Promise<MyBookings> {
+  const data = await authFetch<unknown>("/club/table-booking/booking/mine");
+  const obj = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+
+  // backend already splits them
+  if (Array.isArray(obj.ticketBookings) || Array.isArray(obj.tableBookings)) {
+    return {
+      ticketBookings: (obj.ticketBookings ?? []) as RizztixTicketDetail[],
+      tableBookings: groupTableBookings((obj.tableBookings ?? []) as TableBooking[]),
+    };
+  }
+
+  const list: Raw[] = Array.isArray(data)
+    ? (data as Raw[])
+    : ((obj.bookings ?? obj.data ?? []) as Raw[]);
+
+  const ticketRaw: Raw[] = [];
+  const tableRaw: Raw[] = [];
+  for (const b of list) {
+    if (looksTable(b)) tableRaw.push(b);
+    else if (looksTicket(b)) ticketRaw.push(b);
+    else tableRaw.push(b); // preserve legacy table-only behaviour
+  }
+
+  return {
+    ticketBookings: ticketRaw as unknown as RizztixTicketDetail[],
+    tableBookings: groupTableBookings(tableRaw as unknown as TableBooking[]),
+  };
+}
+
+/** does a ticket detail actually carry a scannable QR? (else we need the detail call) */
+export function ticketHasQr(t: RizztixTicketDetail): boolean {
+  return !!(
+    t.qrstring ||
+    t.qrcode ||
+    t.qrcodeimage ||
+    t.qrcodeimages?.length ||
+    t.passQrcodes?.length
+  );
 }
 
 /** API F — one booking by id. */
