@@ -55,7 +55,7 @@ export default function Header() {
                 aria-label="Go back"
                 className="group flex items-center gap-1.5 rounded-full border border-line bg-coal/60 px-3 py-1.5 text-cream backdrop-blur-md transition-colors hover:border-primary hover:text-primary"
               >
-                <span className="text-sm leading-none transition-transform duration-300 group-hover:-translate-x-0.5">
+                <span className="relative -top-px text-sm leading-none transition-transform duration-300 group-hover:-translate-x-0.5">
                   ←
                 </span>
                 <span className="label !text-current">Back</span>

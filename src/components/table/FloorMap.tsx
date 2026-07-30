@@ -18,6 +18,7 @@ interface Props {
 type View = { s: number; tx: number; ty: number; min: number; max: number };
 
 const TAP_SLOP = 8; // px of movement below which a pointer up counts as a tap
+const OVERPAN = 56; // ~1.5cm of over-pan past the map edges before it stops
 
 export default function FloorMap({ layout, selectedIds, onToggle, onGuideActive }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -59,12 +60,31 @@ export default function FloorMap({ layout, selectedIds, onToggle, onGuideActive 
 
   const clamp = (s: number) => Math.max(view.current.min, Math.min(view.current.max, s));
 
+  /* keep the map on-screen: allow only OVERPAN px of empty space past any edge.
+     Content bigger than the viewport can pan (with over-pan at the extremes);
+     content smaller than the viewport stays near centre (± over-pan). */
+  const clampTranslate = () => {
+    const vp = viewportRef.current;
+    if (!vp || !nat.current.w) return;
+    const v = view.current;
+    const axis = (t: number, content: number, viewport: number) => {
+      if (content <= viewport) {
+        const center = (viewport - content) / 2;
+        return Math.max(center - OVERPAN, Math.min(center + OVERPAN, t));
+      }
+      return Math.max(viewport - content - OVERPAN, Math.min(OVERPAN, t));
+    };
+    v.tx = axis(v.tx, nat.current.w * v.s, vp.clientWidth);
+    v.ty = axis(v.ty, nat.current.h * v.s, vp.clientHeight);
+  };
+
   const zoomAt = (ax: number, ay: number, targetS: number, animate = false) => {
     const v = view.current;
     const s2 = clamp(targetS);
     v.tx = ax - (s2 / v.s) * (ax - v.tx);
     v.ty = ay - (s2 / v.s) * (ay - v.ty);
     v.s = s2;
+    clampTranslate();
     apply(animate);
   };
 
@@ -236,6 +256,7 @@ export default function FloorMap({ layout, selectedIds, onToggle, onGuideActive 
     if (moved.current > TAP_SLOP) dragged.current = true;
     view.current.tx = pan.current.tx + (p.x - pan.current.x);
     view.current.ty = pan.current.ty + (p.y - pan.current.y);
+    clampTranslate();
     apply();
   };
 

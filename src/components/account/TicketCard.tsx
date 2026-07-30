@@ -16,6 +16,11 @@ export default function TicketCard({ booking: b, onView, priority = false }: Pro
   const ev = b.tickets[0]?.eventDetails;
   const lines = ticketTypeLines(b.tickets);
   const qrCount = bookingSlides(b.tickets).length;
+  // only a paid/confirmed booking has a valid entry QR — same test as the
+  // status pill. Pending / failed orders show a note instead of View QR.
+  const status = b.orderstatus ?? "";
+  const isPaid = /paid|confirm|success|complete/i.test(status);
+  const isPending = /pending|process|await|initiat/i.test(status);
 
   return (
     <div className="flex gap-4 rounded-sm border border-line p-4 transition-colors hover:border-cream/30 sm:gap-6 sm:p-5">
@@ -66,12 +71,19 @@ export default function TicketCard({ booking: b, onView, priority = false }: Pro
         </div>
 
         <div className="mt-auto pt-4">
-          <button
-            onClick={() => onView(b)}
-            className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
-          >
-            View QR{qrCount > 1 ? `s (${qrCount})` : ""}
-          </button>
+          {isPaid ? (
+            <button
+              onClick={() => onView(b)}
+              className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
+            >
+              View QR{qrCount > 1 ? `s (${qrCount})` : ""}
+            </button>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-muted">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+              {isPending ? "Awaiting payment" : "QR unavailable"}
+            </span>
+          )}
         </div>
       </div>
     </div>
