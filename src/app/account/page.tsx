@@ -214,7 +214,7 @@ export default function AccountPage() {
   const visibleTables =
     tables === null
       ? null
-      : tables.filter((b) => belongsToClub(b) && isTableBookingVisible(b, nowMs));
+      : tables.filter((b) => belongsToClub(b) && isTableBookingVisible(b));
 
   return (
     <div className="mx-auto max-w-5xl px-5 pb-20 pt-28 md:px-8 md:pt-36">

@@ -323,10 +323,10 @@ export interface TableInitResult {
 export interface TableBooking {
   _id: string;
   bookingref: string;
-  status: string; // PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
-  /** club this booking belongs to — used to filter My Account to our club */
+  status: string; // PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED | HOLD_EXPIRED | RELEASED
+  /** club this booking belongs to — /booking/mine populates clubid as an object */
   slug?: string;
-  clubid?: string;
+  clubid?: string | { _id?: string; name?: string; slug?: string };
   minimumSpend: number;
   depositAmount: number;
   payNowAmount: number;

@@ -25,12 +25,22 @@ const TICKET_GRACE_MS = 3 * 60 * 1000;
 export function belongsToClub(item: {
   slug?: string;
   clubSlug?: string;
-  clubid?: string;
-  clubId?: string;
+  // clubid may be a plain id string (tickets) OR a populated club object (tables)
+  clubid?: string | { _id?: string; slug?: string } | null;
+  clubId?: string | { _id?: string; slug?: string } | null;
+  club?: { _id?: string; slug?: string } | null;
 }): boolean {
-  const slug = item.slug ?? item.clubSlug;
+  const clubObj =
+    (item.clubid && typeof item.clubid === "object" ? item.clubid : null) ??
+    (item.clubId && typeof item.clubId === "object" ? item.clubId : null) ??
+    item.club ??
+    null;
+  const slug = item.slug ?? item.clubSlug ?? clubObj?.slug;
   if (slug) return slug === CLUB_SLUG;
-  const clubid = item.clubid ?? item.clubId;
+  const clubid =
+    (typeof item.clubid === "string" ? item.clubid : undefined) ??
+    (typeof item.clubId === "string" ? item.clubId : undefined) ??
+    clubObj?._id;
   if (clubid) return clubid === CLUB_ID;
   return true;
 }
@@ -46,14 +56,20 @@ export function isTicketBookingVisible(t: RizztixTicketDetail, now: number): boo
   return now - placed < TICKET_GRACE_MS;
 }
 
-/** Table booking: confirmed → always; pending → only while the hold is unexpired. */
-export function isTableBookingVisible(b: TableBooking, now: number): boolean {
+/**
+ * Table booking visibility. The backend flips an abandoned hold to HOLD_EXPIRED
+ * once its hold lapses, so we key off `status` rather than parsing
+ * `holdexpiresat` — that timestamp is cleared the moment a deposit is paid, which
+ * was wrongly hiding freshly-paid PENDING_PAYMENT bookings whose QRs hadn't
+ * minted yet. Rule:
+ *   - CONFIRMED / PENDING_PAYMENT / any active (non-dead) status → show
+ *   - HOLD_EXPIRED / EXPIRED / CANCELLED / RELEASED → hide
+ */
+export function isTableBookingVisible(b: TableBooking): boolean {
   const status = (b.status ?? "").toUpperCase();
-  if (status === "CONFIRMED" || PAID.test(status)) return true;
-  if (status.includes("PENDING")) {
-    if (!b.holdexpiresat) return false;
-    const exp = +new Date(b.holdexpiresat);
-    return !Number.isNaN(exp) && exp > now;
+  // dead / inactive states never show (HOLD_EXPIRED, EXPIRED, CANCELLED, RELEASED)
+  if (status.includes("EXPIR") || status.includes("CANCEL") || status.includes("RELEAS")) {
+    return false;
   }
-  return false; // EXPIRED, CANCELLED, HOLD_EXPIRED, …
+  return true; // CONFIRMED, PENDING_PAYMENT, any active state
 }

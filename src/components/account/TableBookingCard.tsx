@@ -28,6 +28,9 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
   const img = b.eventid?.image;
   const date = b.eventid?.startdatetime ?? b.serviceDate;
   const confirmed = b.status === "CONFIRMED";
+  // entry QRs mean the booking is genuinely paid — surface them even if the
+  // backend still labels the booking PENDING_PAYMENT (balance due at venue)
+  const hasQr = qrs.length > 0;
 
   const setQrOpen = (v: boolean) => {
     setOpen(v);
@@ -36,7 +39,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
 
   // deep-link: open on mount when asked (only if there's a QR to show)
   useEffect(() => {
-    if (autoOpen && confirmed && qrs.length > 0) setQrOpen(true);
+    if (autoOpen && hasQr) setQrOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoOpen]);
 
@@ -69,7 +72,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
             at venue
           </p>
           <div className="mt-auto pt-4">
-            {confirmed && qrs.length > 0 ? (
+            {hasQr ? (
               <button
                 onClick={() => setQrOpen(true)}
                 className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
