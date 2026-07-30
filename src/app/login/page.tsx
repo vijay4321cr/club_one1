@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { requestOtp, resendOtp, verifyOtp, ApiError, type NewUserDetails } from "@/lib/auth";
 import { useAuth } from "@/lib/useAuth";
+import { maxDobForAge, isAtLeastAge } from "@/lib/format";
 
 type Step = "phone" | "details" | "otp";
 
@@ -70,6 +71,10 @@ function LoginFlow() {
 
   const submitDetails = (e: FormEvent) => {
     e.preventDefault();
+    if (!isAtLeastAge(details.dob, 21)) {
+      setError("You must be at least 21 to create an account.");
+      return;
+    }
     void sendOtp(details);
   };
 
@@ -151,7 +156,8 @@ function LoginFlow() {
             label="Date of birth"
             type="date"
             required
-            max={new Date().toISOString().split("T")[0]}
+            min={maxDobForAge(100)}
+            max={maxDobForAge(21)}
             value={details.dob}
             onChange={(e) => setDetails({ ...details, dob: e.target.value })}
             onClick={(e) => e.currentTarget.showPicker?.()}

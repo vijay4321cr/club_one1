@@ -19,6 +19,12 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
   const [open, setOpen] = useState(false);
   const qrs = b.guestQrcodes ?? [];
   const tableCount = b.tableCount ?? 1;
+  // show the actual table label(s) — "T1" or, for a multi-table order, "T1 | T3"
+  // (grouped bookings carry the joined labels in areaLabel, split by " · ")
+  const tableLabels =
+    tableCount > 1
+      ? (b.areaLabel ?? b.table?.tableLabel ?? "Reserved").split(" · ").join(" | ")
+      : b.table?.tableLabel ?? b.areaLabel ?? "Reserved";
   const img = b.eventid?.image;
   const date = b.eventid?.startdatetime ?? b.serviceDate;
   const confirmed = b.status === "CONFIRMED";
@@ -52,7 +58,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-gold/50 bg-gold/10 px-3 py-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-gold">
-              {tableCount > 1 ? `${tableCount} tables` : "Table"} · {b.table?.tableLabel ?? b.areaLabel ?? "reserved"}
+              {tableLabels}
             </span>
             <span className="rounded-full border border-line px-3 py-1 text-[0.625rem] font-medium uppercase tracking-[0.14em]">
               {b.partySize} pax

@@ -13,8 +13,10 @@ import { getSession, authFetch } from "@/lib/auth";
 /* ------------------------------------------------------------------ */
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rizztixapi.https://riztix-backend.onrender.comcom";
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rizztixapi.com";
 export const CLUB_SLUG = process.env.NEXT_PUBLIC_CLUB_SLUG ?? "bhk-slug";
+/** this club's Mongo id — fallback for matching bookings that carry clubid, not slug */
+export const CLUB_ID = process.env.NEXT_PUBLIC_CLUB_ID ?? "69f1b158817e2d8dff08a2c6";
 
 /** Every Rizztix response is wrapped in { message, data }. */
 interface Envelope<T> {

@@ -53,7 +53,7 @@ export default function Header() {
               <button
                 onClick={goBack}
                 aria-label="Go back"
-                className="group flex items-center gap-1.5 rounded-full border border-line bg-coal/60 px-3 py-1.5 text-cream backdrop-blur-md transition-colors hover:border-primary hover:text-primary"
+                className="group hidden items-center gap-1.5 rounded-full border border-line bg-coal/60 px-3 py-1.5 text-cream backdrop-blur-md transition-colors hover:border-primary hover:text-primary sm:flex"
               >
                 <span className="relative -top-px text-sm leading-none transition-transform duration-300 group-hover:-translate-x-0.5">
                   ←

@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import TransitionLink from "@/components/ui/TransitionLink";
 import FloorMap from "@/components/table/FloorMap";
 import BrandLoader from "@/components/layout/BrandLoader";
+import TermsDisclosure from "@/components/events/TermsDisclosure";
 import QrSlider from "@/components/account/QrSlider";
 import { useAuth } from "@/lib/useAuth";
 import { ApiError } from "@/lib/auth";
@@ -688,16 +689,8 @@ export default function TableBooking() {
               </p>
             </dl>
 
-            {/* T&C — same as ticket checkout; opens in a new tab so the sheet stays put */}
-            <a
-              href="/legal/terms"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 flex items-center justify-between gap-2 rounded-md border border-line p-3 text-[0.6875rem] font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
-            >
-              Terms and conditions
-              <span aria-hidden className="no-underline">↗</span>
-            </a>
+            {/* T&C — inline & expandable so the sheet is never torn down */}
+            <TermsDisclosure terms={event?.terms} />
 
             {error && <p className="mt-3 text-sm text-primary">{error}</p>}
 

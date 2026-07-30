@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
+import TermsDisclosure from "@/components/events/TermsDisclosure";
 import QrSlider from "@/components/account/QrSlider";
 import { bookingSlides, bookingGroups } from "@/components/account/TicketModal";
 import { authFetch, ApiError } from "@/lib/auth";
@@ -681,17 +682,9 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
               </div>
             </div>
 
-            {/* T&C — opens in a new tab so this confirmation popup stays open
-                until the user closes it themselves (no navigation teardown) */}
-            <a
-              href="/legal/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-between gap-2 rounded-md border border-line p-4 text-xs font-medium uppercase tracking-[0.14em] underline underline-offset-4 transition-colors hover:text-primary"
-            >
-              Terms and conditions
-              <span aria-hidden className="no-underline">↗</span>
-            </a>
+            {/* T&C — inline & expandable so opening it never tears down this
+                popup (no navigation). Shows the event's own terms, point by point. */}
+            <TermsDisclosure terms={ev.terms} />
 
             {error && <p className="mt-4 text-sm text-primary">{error}</p>}
 

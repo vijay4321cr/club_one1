@@ -10,6 +10,8 @@ import { logout, updateUser, ApiError } from "@/lib/auth";
 import { streamMyTickets } from "@/lib/api";
 import { getMyTableBookings } from "@/lib/tableApi";
 import { useAuth } from "@/lib/useAuth";
+import { maxDobForAge, isAtLeastAge } from "@/lib/format";
+import { isTicketBookingVisible, isTableBookingVisible, belongsToClub } from "@/lib/bookingVisibility";
 import type { RizztixTicketDetail, TableBooking } from "@/types";
 
 type Tab = "tickets" | "tables" | "profile";
@@ -56,9 +58,19 @@ export default function AccountPage() {
   // deep-link: which order's QR to reveal, from ?order= (read once on mount)
   const [orderParam, setOrderParam] = useState<string | null>(null);
   const [autoOpened, setAutoOpened] = useState(false);
+  // clock used to age-out pending bookings; ticks so they disappear live at the
+  // 3-min / hold-expiry mark. null on first paint → nowMs 0 shows recent pending.
+  const [now, setNow] = useState<number | null>(null);
+  const nowMs = now ?? 0;
 
   useEffect(() => {
     setOrderParam(new URLSearchParams(window.location.search).get("order"));
+  }, []);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   /** reflect the open QR in the URL without navigating (no Lenis/scroll fight) */
@@ -92,6 +104,11 @@ export default function AccountPage() {
   const saveProfile = async (e: FormEvent) => {
     e.preventDefault();
     if (saveState === "busy") return;
+    if (form.dob && !isAtLeastAge(form.dob, 21)) {
+      setSaveErr("You must be at least 21.");
+      setSaveState("error");
+      return;
+    }
     setSaveState("busy");
     setSaveErr("");
     try {
@@ -186,6 +203,19 @@ export default function AccountPage() {
     );
   }
 
+  // hide stale-pending / expired bookings (paid always shows; pending only within
+  // its grace window) — recomputed as `now` ticks so they drop off live
+  const ticketGroups =
+    tickets === null
+      ? null
+      : groupTickets(tickets).filter(
+          (g) => belongsToClub(g.tickets[0]) && isTicketBookingVisible(g.tickets[0], nowMs)
+        );
+  const visibleTables =
+    tables === null
+      ? null
+      : tables.filter((b) => belongsToClub(b) && isTableBookingVisible(b, nowMs));
+
   return (
     <div className="mx-auto max-w-5xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       <p className="label mb-3">My account</p>
@@ -225,9 +255,9 @@ export default function AccountPage() {
 
       {tab === "tickets" && (
         <div className="mt-8">
-          {tickets === null ? (
+          {ticketGroups === null ? (
             <p className="label">Loading your bookings…</p>
-          ) : tickets.length === 0 ? (
+          ) : ticketGroups.length === 0 ? (
             <div className="rounded-sm border border-line p-8 text-center">
               <p className="text-sm text-muted">
                 {error || "No ticket bookings yet."}
@@ -238,7 +268,7 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {groupTickets(tickets).map((g, i) => (
+              {ticketGroups.map((g, i) => (
                 <TicketCard key={g.key} booking={g} onView={viewBooking} priority={i === 0} />
               ))}
             </div>
@@ -248,9 +278,9 @@ export default function AccountPage() {
 
       {tab === "tables" && (
         <div className="mt-8">
-          {tables === null ? (
+          {visibleTables === null ? (
             <p className="label">Loading your table bookings…</p>
-          ) : tables.length === 0 ? (
+          ) : visibleTables.length === 0 ? (
             <div className="rounded-sm border border-line p-8 text-center">
               <p className="text-sm text-muted">No table bookings yet.</p>
               <Button href="/event" className="mt-5">
@@ -259,7 +289,7 @@ export default function AccountPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {tables.map((b) => (
+              {visibleTables.map((b) => (
                 <TableBookingCard
                   key={b._id}
                   booking={b}
@@ -305,8 +335,11 @@ export default function AccountPage() {
               <Input
                 label="Date of birth"
                 type="date"
+                min={maxDobForAge(100)}
+                max={maxDobForAge(21)}
                 value={form.dob}
                 onChange={(e) => setForm({ ...form, dob: e.target.value })}
+                onClick={(e) => e.currentTarget.showPicker?.()}
               />
               {saveErr && <p className="text-sm text-primary">{saveErr}</p>}
               <div className="flex gap-3">

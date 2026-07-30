@@ -12,7 +12,7 @@ import ArtistBadge from "@/components/events/ArtistBadge";
 import UpcomingGrid from "@/components/events/UpcomingGrid";
 import { smoothScrollTo } from "@/components/layout/LenisProvider";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
-import { eventDateLong } from "@/lib/format";
+import { eventDateLong, splitNumberedPoints } from "@/lib/format";
 
 /** Event detail, client-fetched — works on fully static hosting. */
 export default function EventDetail() {
@@ -166,9 +166,23 @@ export default function EventDetail() {
             <p className="label mb-4">Terms &amp; Conditions</p>
           </FxReveal>
           <Reveal>
-            <p className="max-w-3xl whitespace-pre-line text-xs leading-relaxed text-muted md:text-sm">
-              {event.terms}
-            </p>
+            {(() => {
+              const points = splitNumberedPoints(event.terms ?? "");
+              return points.length > 1 ? (
+                <ol className="max-w-3xl space-y-2 text-xs leading-relaxed text-muted md:text-sm">
+                  {points.map((p, i) => (
+                    <li key={i} className="flex gap-2.5">
+                      <span className="shrink-0 text-primary">{i + 1}.</span>
+                      <span>{p}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="max-w-3xl whitespace-pre-line text-xs leading-relaxed text-muted md:text-sm">
+                  {event.terms}
+                </p>
+              );
+            })()}
           </Reveal>
         </div>
       )}

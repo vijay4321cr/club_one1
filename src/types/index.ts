@@ -181,6 +181,14 @@ export interface RizztixTicketDetail {
   amount?: number;
   orderstatus?: string;
   paymentstatus?: string;
+  /** club this ticket belongs to — used to filter My Account to our club */
+  slug?: string;
+  clubid?: string;
+  /** ISO timestamps used to age-out unpaid orders in My Account */
+  orderstatustimestamp?: string;
+  paymentstatustimestamp?: string;
+  createdAt?: string;
+  createdat?: string;
   passesPerUnit?: number;
   passCount?: number;
   unitIndex?: number;
@@ -316,6 +324,9 @@ export interface TableBooking {
   _id: string;
   bookingref: string;
   status: string; // PENDING_PAYMENT | CONFIRMED | CANCELLED | EXPIRED
+  /** club this booking belongs to — used to filter My Account to our club */
+  slug?: string;
+  clubid?: string;
   minimumSpend: number;
   depositAmount: number;
   payNowAmount: number;
