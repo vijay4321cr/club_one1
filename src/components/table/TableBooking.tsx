@@ -498,7 +498,9 @@ export default function TableBooking() {
             <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
             {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
           </div>
-          {/* service night — read-only (no calendar/picker) */}
+          {/* Service night — shown read-only. The calendar/date-picker was
+              intentionally removed; the night is fixed to the event's date and
+              only displayed here for reference. */}
           {serviceDate && (
             <div className="sm:text-right">
               <span className="label mb-1 block">Night</span>
