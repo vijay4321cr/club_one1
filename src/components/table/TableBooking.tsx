@@ -81,6 +81,16 @@ export default function TableBooking() {
   const [qrsLoading, setQrsLoading] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
   const [orderId, setOrderId] = useState("");
+  // payment session from the FIRST init — the backend omits it when it returns
+  // an already-held booking on retry, so we reuse this to reopen the gateway
+  const paySession = useRef<{
+    orderid: string;
+    payment_session_id?: string | null;
+    razorpayKeyId?: string;
+    cashfreeEnv?: string;
+    currency?: string;
+    payNowAmount: number;
+  } | null>(null);
 
   // lock page scroll while the booking sheet is open
   useEffect(() => {
@@ -279,14 +289,42 @@ export default function TableBooking() {
       // payment fields nest inside `booking` (real HAR), unlike ticket /order/buy
       const b = init.booking;
       setOrderId(b.orderid);
+
+      // The backend returns a payment session only when it CREATES a hold. On a
+      // retry of an already-held booking it responds { alreadyBooked, booking }
+      // with NO session — so cache the session from the first attempt and reuse
+      // it for the same order, otherwise the gateway can't reopen and the user
+      // is stuck on "No payment method available".
+      const hasSession = !!(b.payment_session_id || b.razorpayKeyId);
+      if (hasSession) {
+        paySession.current = {
+          orderid: b.orderid,
+          payment_session_id: b.payment_session_id,
+          razorpayKeyId: b.razorpayKeyId,
+          cashfreeEnv: b.cashfreeEnv,
+          currency: b.currency,
+          payNowAmount: b.payNowAmount ?? quote.payNowAmount,
+        };
+      }
+      const pf =
+        hasSession || paySession.current?.orderid === b.orderid ? paySession.current : null;
+
+      if (!pf) {
+        setError(
+          `This table is already held for you (ref ${b.bookingref}). Give it a moment and tap Book now again, or finish payment from My Account.`
+        );
+        setPhase("details");
+        return;
+      }
+
       const result = await openCheckout(
         {
-          orderid: b.orderid,
-          amount: b.payNowAmount ?? quote.payNowAmount,
-          currency: b.currency,
-          payment_session_id: b.payment_session_id,
-          cashfreeEnv: b.cashfreeEnv,
-          razorpayKeyId: b.razorpayKeyId,
+          orderid: pf.orderid,
+          amount: pf.payNowAmount ?? quote.payNowAmount,
+          currency: pf.currency,
+          payment_session_id: pf.payment_session_id,
+          cashfreeEnv: pf.cashfreeEnv,
+          razorpayKeyId: pf.razorpayKeyId,
         },
         {
           name: session.user.fullname,
