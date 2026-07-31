@@ -20,7 +20,7 @@ import {
   getMyTableBookings,
 } from "@/lib/tableApi";
 import { useUpcomingEvents } from "@/lib/useUpcoming";
-import { inr, inrExact } from "@/lib/format";
+import { inr, inrExact, eventDateLong } from "@/lib/format";
 import type { TableLayout, TableZone, TableSpot, TableGuestQr } from "@/types";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -493,9 +493,18 @@ export default function TableBooking() {
             ← Back to event
           </TransitionLink>
         </p>
-        <div className="border-b border-line pb-6">
-          <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
-          {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
+          <div>
+            <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
+            {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
+          </div>
+          {/* service night — read-only (no calendar/picker) */}
+          {serviceDate && (
+            <div className="sm:text-right">
+              <span className="label mb-1 block">Night</span>
+              <span className="text-sm text-cream">{eventDateLong(serviceDate)}</span>
+            </div>
+          )}
         </div>
       </Reveal>
 
