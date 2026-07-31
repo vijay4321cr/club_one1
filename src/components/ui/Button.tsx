@@ -4,7 +4,7 @@ import { useRef, type ReactNode, type MouseEvent } from "react";
 import gsap from "gsap";
 import TransitionLink from "@/components/ui/TransitionLink";
 
-type Variant = "primary" | "outline" | "gold" | "ghost";
+type Variant = "primary" | "outline" | "outlinePrimary" | "gold" | "ghost";
 
 interface Props {
   children: ReactNode;
@@ -22,6 +22,8 @@ const variants: Record<Variant, string> = {
     "bg-primary text-cream hover:bg-cream hover:text-coal",
   outline:
     "border border-line text-cream hover:border-cream hover:bg-cream hover:text-coal",
+  outlinePrimary:
+    "border border-primary text-primary hover:bg-primary hover:text-cream",
   gold: "bg-gold text-coal hover:bg-cream",
   ghost: "text-cream hover:text-primary",
 };

@@ -108,7 +108,7 @@ export default function EventDetail() {
             </p>
             {event.tableBookingEnabled && (
               <div className="mt-6">
-                <Button href={`/event/table?event=${event._id}`} variant="outline">
+                <Button href={`/event/table?event=${event._id}`} variant="outlinePrimary">
                   Book a Table
                 </Button>
               </div>
