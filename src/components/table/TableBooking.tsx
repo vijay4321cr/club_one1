@@ -297,6 +297,16 @@ export default function TableBooking() {
           currency: b.currency,
           payNowAmount: b.payNowAmount ?? quote.payNowAmount,
         };
+        // persist so a pending booking can be resumed from My Account (same
+        // browser, while the hold is still alive) via ?resume={orderid}
+        try {
+          sessionStorage.setItem(
+            `bhk:paysess:${b.orderid}`,
+            JSON.stringify({ ...paySession.current, bookingId: b._id, eventId })
+          );
+        } catch {
+          /* ignore */
+        }
       }
       const pf =
         hasSession || paySession.current?.orderid === b.orderid ? paySession.current : null;
@@ -353,6 +363,11 @@ export default function TableBooking() {
       // up — the poll below waits until every guest QR has minted, then reveals
       setGuestQrs((booking.guestQrcodes ?? []).filter((q) => q.qrcodeimage || q.qrstring));
       setQrsLoading(true);
+      try {
+        sessionStorage.removeItem(`bhk:paysess:${b.orderid}`);
+      } catch {
+        /* ignore */
+      }
       setPhase("done");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -367,6 +382,106 @@ export default function TableBooking() {
       setShowModal(true);
     }
   };
+
+  /* ---------- resume a pending booking's payment (from My Account) ---------- */
+  const resumePayment = async (saved: {
+    orderid: string;
+    payment_session_id?: string | null;
+    razorpayKeyId?: string;
+    cashfreeEnv?: string;
+    currency?: string;
+    payNowAmount: number;
+    bookingId: string;
+    eventId?: string;
+  }) => {
+    if (!session) return;
+    setError("");
+    setShowModal(false);
+    setPhase("paying");
+    try {
+      const result = await openCheckout(
+        {
+          orderid: saved.orderid,
+          amount: saved.payNowAmount,
+          currency: saved.currency,
+          payment_session_id: saved.payment_session_id,
+          cashfreeEnv: saved.cashfreeEnv,
+          razorpayKeyId: saved.razorpayKeyId,
+        },
+        {
+          name: session.user.fullname,
+          email: session.user.email,
+          contact: session.user.phone,
+          description: `${event?.title ?? "2BHK"} · table booking`,
+        }
+      );
+      if (result.status === "dismissed") {
+        setPhase("map");
+        return;
+      }
+      if (result.status === "error" || result.status === "no_provider") {
+        setError(
+          result.status === "error"
+            ? result.message
+            : "Couldn't reopen this payment — the hold may have expired. Please book again."
+        );
+        setPhase("map");
+        return;
+      }
+      setPhase("confirming");
+      const { booking } = await confirmTableBooking({
+        bookingId: saved.bookingId,
+        eventId: saved.eventId || eventId,
+        cashfree: result.status === "cashfree" ? { order_id: result.order_id } : undefined,
+        razorpay: result.status === "razorpay" ? result : undefined,
+      });
+      setOrderId(saved.orderid);
+      setBookingRef(booking.bookingref ?? "");
+      setGuestQrs((booking.guestQrcodes ?? []).filter((q) => q.qrcodeimage || q.qrstring));
+      setQrsLoading(true);
+      try {
+        sessionStorage.removeItem(`bhk:paysess:${saved.orderid}`);
+      } catch {
+        /* ignore */
+      }
+      setPhase("done");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't complete payment — please try again.");
+      setPhase("map");
+    }
+  };
+
+  // "Continue payment" from My Account → ?resume={orderid}: reopen the saved
+  // gateway session for that pending hold (same browser, hold still alive)
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current || !session) return;
+    const resumeOrderId = params.get("resume");
+    if (!resumeOrderId) return;
+    resumedRef.current = true;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(`bhk:paysess:${resumeOrderId}`);
+    } catch {
+      /* ignore */
+    }
+    // drop the param so a refresh doesn't retrigger the gateway
+    try {
+      window.history.replaceState(null, "", `/event/table?event=${eventId}`);
+    } catch {
+      /* ignore */
+    }
+    if (!raw) {
+      setError("We couldn't resume that payment here — please book the table again.");
+      return;
+    }
+    try {
+      void resumePayment(JSON.parse(raw));
+    } catch {
+      setError("We couldn't resume that payment here — please book the table again.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   // on success, keep fetching until EVERY guest QR is minted (they generate
   // async), then reveal them all at once — no partial slider that grows as each

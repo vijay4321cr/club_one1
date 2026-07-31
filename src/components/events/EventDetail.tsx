@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import Reveal from "@/components/ui/Reveal";
@@ -23,6 +23,9 @@ export default function EventDetail() {
   const event = data?.events.find((e) => e._id === id);
   const ticketsRef = useRef<HTMLDivElement>(null);
   const glided = useRef(false);
+  // About + Terms are collapsed by default (they're long) — expand on tap
+  const [openAbout, setOpenAbout] = useState(false);
+  const [openTerms, setOpenTerms] = useState(false);
 
   useEffect(() => {
     if (event) document.title = `${event.title} — 2BHK`;
@@ -140,17 +143,35 @@ export default function EventDetail() {
         </div>
       )}
 
-      {/* about this event (from the box office) */}
+      {/* about this event (from the box office) — collapsed by default */}
       {event.aboutevent?.trim() && (
         <div className="mt-14 border-t border-line pt-10 md:mt-20 md:pt-14">
-          <FxReveal effect="wipe">
-            <p className="label mb-4">About the event</p>
-          </FxReveal>
-          <Reveal>
-            <p className="max-w-3xl whitespace-pre-line text-sm leading-relaxed text-cream/80 md:text-base">
-              {event.aboutevent}
-            </p>
-          </Reveal>
+          <button
+            type="button"
+            onClick={() => setOpenAbout((v) => !v)}
+            aria-expanded={openAbout}
+            className="flex w-full items-center justify-between gap-4 text-left transition-colors hover:text-primary"
+          >
+            <span className="label">About the event</span>
+            <span
+              className={`inline-block text-sm transition-transform duration-300 ${
+                openAbout ? "rotate-180" : ""
+              }`}
+            >
+              ▾
+            </span>
+          </button>
+          <div
+            className={`grid transition-all duration-300 ${
+              openAbout ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            }`}
+          >
+            <div className="overflow-hidden">
+              <p className="max-w-3xl whitespace-pre-line pt-4 text-sm leading-relaxed text-cream/80 md:text-base">
+                {event.aboutevent}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -159,31 +180,49 @@ export default function EventDetail() {
         <TicketPurchase event={event} />
       </section>
 
-      {/* event terms & conditions */}
+      {/* event terms & conditions — collapsed by default */}
       {event.terms?.trim() && (
         <div className="mt-14 border-t border-line pt-10 md:mt-20 md:pt-14">
-          <FxReveal effect="wipe">
-            <p className="label mb-4">Terms &amp; Conditions</p>
-          </FxReveal>
-          <Reveal>
-            {(() => {
-              const points = splitNumberedPoints(event.terms ?? "");
-              return points.length > 1 ? (
-                <ol className="max-w-3xl space-y-2 text-xs leading-relaxed text-muted md:text-sm">
-                  {points.map((p, i) => (
-                    <li key={i} className="flex gap-2.5">
-                      <span className="shrink-0 text-primary">{i + 1}.</span>
-                      <span>{p}</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="max-w-3xl whitespace-pre-line text-xs leading-relaxed text-muted md:text-sm">
-                  {event.terms}
-                </p>
-              );
-            })()}
-          </Reveal>
+          <button
+            type="button"
+            onClick={() => setOpenTerms((v) => !v)}
+            aria-expanded={openTerms}
+            className="flex w-full items-center justify-between gap-4 text-left transition-colors hover:text-primary"
+          >
+            <span className="label">Terms &amp; Conditions</span>
+            <span
+              className={`inline-block text-sm transition-transform duration-300 ${
+                openTerms ? "rotate-180" : ""
+              }`}
+            >
+              ▾
+            </span>
+          </button>
+          <div
+            className={`grid transition-all duration-300 ${
+              openTerms ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            }`}
+          >
+            <div className="overflow-hidden">
+              {(() => {
+                const points = splitNumberedPoints(event.terms ?? "");
+                return points.length > 1 ? (
+                  <ol className="max-w-3xl space-y-2 pt-4 text-xs leading-relaxed text-muted md:text-sm">
+                    {points.map((p, i) => (
+                      <li key={i} className="flex gap-2.5">
+                        <span className="shrink-0 text-primary">{i + 1}.</span>
+                        <span>{p}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="max-w-3xl whitespace-pre-line pt-4 text-xs leading-relaxed text-muted md:text-sm">
+                    {event.terms}
+                  </p>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
     </div>

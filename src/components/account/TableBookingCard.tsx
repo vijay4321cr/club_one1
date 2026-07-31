@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import QrSlider from "@/components/account/QrSlider";
+import TransitionLink from "@/components/ui/TransitionLink";
 import { eventDate } from "@/lib/format";
 import type { TableBooking } from "@/types";
 
@@ -79,6 +80,13 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
               >
                 View entry QR{readyQrs.length > 1 ? `s (${readyQrs.length})` : ""}
               </button>
+            ) : b.orderid && b.eventId ? (
+              <TransitionLink
+                href={`/event/table?event=${b.eventId}&resume=${b.orderid}`}
+                className="inline-block rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
+              >
+                Continue payment
+              </TransitionLink>
             ) : (
               <span className="label !text-gold">Payment pending</span>
             )}
