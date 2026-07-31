@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import QrSlider from "@/components/account/QrSlider";
-import { inr, eventDate } from "@/lib/format";
+import { eventDate } from "@/lib/format";
 import type { TableBooking } from "@/types";
 
 interface Props {
@@ -71,10 +71,6 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
               {b.partySize} pax
             </span>
           </div>
-          <p className="mt-2 text-xs text-muted">
-            Paid {inr(b.payNowAmount)} · {inr((b.minimumSpend ?? 0) - (b.depositAmount ?? 0))} balance
-            at venue
-          </p>
           <div className="mt-auto pt-4">
             {hasQr ? (
               <button

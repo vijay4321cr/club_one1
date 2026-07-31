@@ -352,9 +352,16 @@ export default function FloorMap({ layout, selectedIds, onToggle, onGuideActive 
           {zone && (
             <button
               onClick={backToOverview}
-              className="flex items-center gap-2 rounded-full bg-cream px-4 py-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-coal shadow-lg shadow-black/40 transition-transform hover:scale-105"
+              aria-label="Back to overview"
+              title="Back to overview"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-cream text-coal shadow-lg shadow-black/40 transition-transform hover:scale-105"
             >
-              ← Overview
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              </svg>
             </button>
           )}
         </div>

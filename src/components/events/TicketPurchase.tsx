@@ -646,7 +646,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                 aria-expanded={showFeeBreakdown}
               >
                 <span className="flex items-center gap-1.5 text-muted">
-                  Booking Fee + GST
+                  Convenience Fees
                   <span
                     className={`inline-block text-xs transition-transform duration-300 ${
                       showFeeBreakdown ? "rotate-180" : ""
@@ -665,7 +665,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
                 <div className="overflow-hidden">
                   <div className="space-y-2 pl-3 text-xs text-muted">
                     <div className="flex justify-between gap-4">
-                      <span>Base Fee</span>
+                      <span>Base Amount</span>
                       <span className="tabular-nums">{inrExact(baseprice)}</span>
                     </div>
                     <div className="flex justify-between gap-4">

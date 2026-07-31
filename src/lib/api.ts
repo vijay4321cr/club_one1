@@ -195,6 +195,34 @@ function ticketListFrom(data: unknown): Record<string, unknown>[] {
 }
 
 /**
+ * Every raw userTickets row across ALL pages, deduped by _id. The list is
+ * paginated (`?page=`) and each booking can span many ticket units, so page 1
+ * alone drops older/past bookings — we walk pages until one adds nothing new.
+ */
+async function fetchAllTicketRows(): Promise<Record<string, unknown>[]> {
+  const rows = new Map<string, Record<string, unknown>>();
+  for (let page = 1; page <= 25; page++) {
+    let list: Record<string, unknown>[];
+    try {
+      list = ticketListFrom(await authFetch<unknown>(`/order/userTickets?page=${page}`));
+    } catch {
+      break;
+    }
+    if (list.length === 0) break;
+    let added = 0;
+    for (const item of list) {
+      const id = item._id as string | undefined;
+      if (id && !rows.has(id)) {
+        rows.set(id, item);
+        added++;
+      }
+    }
+    if (added === 0) break; // nothing new → last page (or the API ignores ?page)
+  }
+  return [...rows.values()];
+}
+
+/**
  * True when a userTickets row already carries its full detail (event info +
  * a scannable QR). The live backend returns this, so no per-bundle detail
  * call is needed; older/lighter responses fail this and fall back below.
@@ -219,7 +247,7 @@ function isFullTicketDetail(item: Record<string, unknown>): boolean {
  * detail (older backend) falls back to viewTicketsWithTicketId; results deduped.
  */
 export async function getAllTicketDetails(): Promise<RizztixTicketDetail[]> {
-  const list = ticketListFrom(await authFetch<unknown>("/order/userTickets?page=1"));
+  const list = await fetchAllTicketRows();
 
   const details = new Map<string, RizztixTicketDetail>();
   const needDetail: string[] = [];
@@ -250,17 +278,32 @@ export async function getAllTicketDetails(): Promise<RizztixTicketDetail[]> {
 export async function streamMyTickets(
   onUpdate: (tickets: RizztixTicketDetail[]) => void
 ): Promise<RizztixTicketDetail[]> {
-  const list = ticketListFrom(await authFetch<unknown>("/order/userTickets?page=1"));
-
   const details = new Map<string, RizztixTicketDetail>();
   const needDetail: string[] = [];
-  for (const item of list) {
-    const id = item._id as string | undefined;
-    if (!id) continue;
-    if (isFullTicketDetail(item)) details.set(id, item as unknown as RizztixTicketDetail);
-    else if (!details.has(id)) needDetail.push(id);
+  const seen = new Set<string>();
+
+  // walk every page so older/past bookings load too (not just page 1),
+  // revealing each page as it lands
+  for (let page = 1; page <= 25; page++) {
+    let list: Record<string, unknown>[];
+    try {
+      list = ticketListFrom(await authFetch<unknown>(`/order/userTickets?page=${page}`));
+    } catch {
+      break;
+    }
+    if (list.length === 0) break;
+    let added = 0;
+    for (const item of list) {
+      const id = item._id as string | undefined;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      added++;
+      if (isFullTicketDetail(item)) details.set(id, item as unknown as RizztixTicketDetail);
+      else needDetail.push(id);
+    }
+    if (details.size) onUpdate([...details.values()]);
+    if (added === 0) break;
   }
-  if (details.size) onUpdate([...details.values()]); // full list is usually ready now
 
   for (const id of needDetail) {
     if (details.has(id)) continue;

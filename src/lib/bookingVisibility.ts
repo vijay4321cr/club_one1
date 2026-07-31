@@ -45,9 +45,15 @@ export function belongsToClub(item: {
   return true;
 }
 
-/** Ticket booking: paid → always; pending → only within 3 min of the order. */
+/**
+ * Ticket booking: any genuinely-paid ticket always shows — including past events
+ * (the backend may relabel orderstatus once the event is over). A truly
+ * pending/unpaid order only shows within the 3-min grace after ordering.
+ */
 export function isTicketBookingVisible(t: RizztixTicketDetail, now: number): boolean {
   if (PAID.test(t.orderstatus ?? "")) return true;
+  if (/captured|paid|success/i.test(t.paymentstatus ?? "")) return true;
+  if (t.qrstring || t.qrcode || t.qrcodeimage || t.passQrcodes?.length) return true; // has entry QR = paid
   const iso =
     t.orderstatustimestamp ?? t.paymentstatustimestamp ?? t.createdAt ?? t.createdat;
   if (!iso) return false; // unknown age → treat as stale, hide

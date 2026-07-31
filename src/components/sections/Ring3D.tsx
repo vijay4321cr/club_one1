@@ -73,8 +73,9 @@ function Ring({ items, entrance, onFront }: RingProps) {
 
     const g = group.current;
     if (!g) return;
-    // responsive: shrink the ring on narrow viewports
-    const base = Math.min(1, Math.max(0.5, viewport.width / 8));
+    // responsive: bigger ring on narrow/mobile viewports (desktop stays clamped
+    // at 1, so this only grows the small-screen carousel)
+    const base = Math.min(1, Math.max(0.68, viewport.width / 6.5));
     const s = base * (0.82 + 0.18 * entrance.current.p);
     g.scale.setScalar(s);
     g.rotation.y = c.value + (1 - entrance.current.p) * -1.3;

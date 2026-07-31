@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AuthSession } from "@/types";
+import { logout } from "@/lib/auth";
 
 const SESSION_KEY = "twobhk_auth";
 
@@ -21,7 +22,15 @@ export function useAuth() {
       if (raw === lastRaw.current) return; // nothing changed — keep identity
       lastRaw.current = raw;
       try {
-        setSession(raw ? (JSON.parse(raw) as AuthSession) : null);
+        const s = raw ? (JSON.parse(raw) as AuthSession) : null;
+        // hard 24h cap — drop a session that has aged out
+        if (s?.sessionExpiresAt && Date.now() > s.sessionExpiresAt) {
+          localStorage.removeItem(SESSION_KEY);
+          lastRaw.current = null;
+          setSession(null);
+          return;
+        }
+        setSession(s);
       } catch {
         setSession(null);
       }
@@ -34,6 +43,18 @@ export function useAuth() {
       window.removeEventListener("storage", read);
     };
   }, []);
+
+  // sign out automatically the moment the 24h cap is reached while the app is open
+  useEffect(() => {
+    if (!session?.sessionExpiresAt) return;
+    const ms = session.sessionExpiresAt - Date.now();
+    if (ms <= 0) {
+      logout();
+      return;
+    }
+    const id = window.setTimeout(() => logout(), ms);
+    return () => window.clearTimeout(id);
+  }, [session?.sessionExpiresAt]);
 
   return { session, user: session?.user ?? null, loading: session === undefined };
 }

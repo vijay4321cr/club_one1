@@ -121,6 +121,8 @@ export interface AuthSession {
   refreshToken: string;
   refreshTokenExpiresAt: string;
   user: RizztixUser;
+  /** epoch ms — hard 24h auto-logout cap, set once at login (survives refreshes) */
+  sessionExpiresAt?: number;
 }
 
 /** POST /order/buy response (important fields) */

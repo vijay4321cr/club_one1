@@ -6,6 +6,8 @@ import type { AuthSession, RizztixUser, User } from "@/types";
 import { API_BASE_URL } from "@/lib/api";
 
 const SESSION_KEY = "twobhk_auth";
+/** hard cap: sign the user out 24h after login, regardless of token refreshes */
+const MAX_SESSION_MS = 24 * 60 * 60 * 1000;
 
 export class ApiError extends Error {
   status: number;
@@ -46,7 +48,13 @@ async function post<T>(path: string, body: unknown, token?: string): Promise<T> 
 export function getSession(): AuthSession | null {
   if (typeof window === "undefined") return null;
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as AuthSession | null;
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? "null") as AuthSession | null;
+    // hard 24h cap — a session past its window is treated as signed out
+    if (s?.sessionExpiresAt && Date.now() > s.sessionExpiresAt) {
+      localStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return s;
   } catch {
     return null;
   }
@@ -122,6 +130,7 @@ export async function verifyOtp(phone: string, otp: string): Promise<AuthSession
     refreshToken: data.refreshToken,
     refreshTokenExpiresAt: data.refreshTokenExpiresAt,
     user: data.user,
+    sessionExpiresAt: Date.now() + MAX_SESSION_MS, // 24h hard cap from login
   };
   saveSession(session);
   return session;

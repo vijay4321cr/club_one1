@@ -157,8 +157,9 @@ export default function MapGuide({ driver, onClose }: { driver: GuideDriver; onC
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-gold" /> Unavailable</span>
       </div>
 
-      {/* step card */}
-      <div className="relative m-3 rounded-lg border border-line bg-surface/95 p-4 shadow-2xl shadow-black/60 backdrop-blur-md sm:m-5 sm:p-5">
+      {/* step card — pinned to the viewport bottom so the Next button is always
+          reachable even though the map is tall and captures touch (no page scroll) */}
+      <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-md rounded-lg border border-line bg-surface/95 p-4 shadow-2xl shadow-black/60 backdrop-blur-md sm:inset-x-5 sm:bottom-5 sm:max-w-lg sm:p-5">
         <p className="label mb-2 !text-[0.5625rem] !text-primary">
           Guided tour · {i + 1} / {STEPS.length}
         </p>

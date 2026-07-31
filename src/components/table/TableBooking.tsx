@@ -240,14 +240,6 @@ export default function TableBooking() {
     return { minimumSpend, depositAmount, bookingFee, gst, cgst, baseamount, payNowAmount };
   }, [selected, depositPercent, event]);
 
-  const dateBounds = useMemo(() => {
-    if (!event) return { min: "", max: "" };
-    const today = iso(new Date());
-    const start = iso(new Date(event.startdatetime));
-    const end = iso(new Date(event.enddatetime));
-    return { min: start > today ? start : today, max: end };
-  }, [event]);
-
   /* ---------- pay ---------- */
   const pay = async () => {
     if (!layout || selected.length === 0 || !quote) return;
@@ -501,23 +493,9 @@ export default function TableBooking() {
             ← Back to event
           </TransitionLink>
         </p>
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
-          <div>
-            <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
-            {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
-          </div>
-          {/* service night picker */}
-          <label className="text-sm">
-            <span className="label mb-1 block">Night</span>
-            <input
-              type="date"
-              value={serviceDate}
-              min={dateBounds.min}
-              max={dateBounds.max}
-              onChange={(e) => setServiceDate(e.target.value)}
-              className="border-b border-line bg-transparent py-2 text-cream focus:border-primary focus:outline-none"
-            />
-          </label>
+        <div className="border-b border-line pb-6">
+          <h1 className="h-display !normal-case text-3xl sm:text-4xl md:text-5xl">Book a Table</h1>
+          {event && <p className="mt-2 text-sm text-muted">{event.title}</p>}
         </div>
       </Reveal>
 
@@ -719,7 +697,7 @@ export default function TableBooking() {
                 aria-expanded={showFeeBreakdown}
               >
                 <span className="flex items-center gap-1.5 text-muted">
-                  Booking Fee + GST
+                  Convenience Fees
                   <span
                     className={`inline-block text-xs transition-transform duration-300 ${
                       showFeeBreakdown ? "rotate-180" : ""
@@ -738,7 +716,7 @@ export default function TableBooking() {
                 <div className="overflow-hidden">
                   <div className="space-y-2 pl-3 text-xs text-muted">
                     <div className="flex justify-between gap-4">
-                      <span>Base Fee</span>
+                      <span>Base Amount</span>
                       <span className="tabular-nums">{inrExact(quote.bookingFee)}</span>
                     </div>
                     <div className="flex justify-between gap-4">
