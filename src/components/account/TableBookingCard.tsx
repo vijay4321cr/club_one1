@@ -18,6 +18,10 @@ interface Props {
 export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }: Props) {
   const [open, setOpen] = useState(false);
   const qrs = b.guestQrcodes ?? [];
+  // only QRs that actually carry a scannable code — a pending/unpaid booking
+  // returns placeholder entries (guestRef only, no image/string) that must NOT
+  // count as a viewable QR (otherwise the popup shows a blank stub)
+  const readyQrs = qrs.filter((q) => q.qrcodeimage || q.qrstring);
   const tableCount = b.tableCount ?? 1;
   // show the actual table label(s) — "T1" or, for a multi-table order, "T1 | T3"
   // (grouped bookings carry the joined labels in areaLabel, split by " · ")
@@ -30,7 +34,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
   const confirmed = b.status === "CONFIRMED";
   // entry QRs mean the booking is genuinely paid — surface them even if the
   // backend still labels the booking PENDING_PAYMENT (balance due at venue)
-  const hasQr = qrs.length > 0;
+  const hasQr = readyQrs.length > 0;
 
   const setQrOpen = (v: boolean) => {
     setOpen(v);
@@ -77,7 +81,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
                 onClick={() => setQrOpen(true)}
                 className="rounded-full bg-primary px-5 py-2.5 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal"
               >
-                View entry QR{qrs.length > 1 ? `s (${qrs.length})` : ""}
+                View entry QR{readyQrs.length > 1 ? `s (${readyQrs.length})` : ""}
               </button>
             ) : (
               <span className="label !text-gold">Payment pending</span>
@@ -86,7 +90,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
         </div>
       </div>
 
-      {open && qrs.length > 0 && (
+      {open && readyQrs.length > 0 && (
         <div
           className="fixed inset-0 z-70 flex items-center justify-center bg-coal/85 p-4 backdrop-blur-sm"
           role="dialog"
@@ -102,7 +106,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
               <div className="min-w-0">
                 <p className="truncate font-display text-lg font-semibold uppercase">{b.bookingref}</p>
                 <p className="label !text-[0.5625rem] !text-muted">
-                  {qrs.length} guest QR{qrs.length > 1 ? "s · swipe to see all" : ""}
+                  {readyQrs.length} guest QR{readyQrs.length > 1 ? "s · swipe to see all" : ""}
                 </p>
               </div>
               <button
@@ -115,7 +119,7 @@ export default function TableBookingCard({ booking: b, autoOpen, onOpenChange }:
             </div>
 
             <QrSlider
-              slides={qrs.map((q) => ({
+              slides={readyQrs.map((q) => ({
                 qrstring: q.qrstring,
                 qrcodeimage: q.qrcodeimage,
                 code: q.guestRef || `Guest ${q.guestIndex}`,
