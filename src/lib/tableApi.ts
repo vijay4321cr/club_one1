@@ -178,12 +178,16 @@ export function groupTableBookings(list: TableBooking[]): TableBooking[] {
       grouped.push(members[0]);
       continue;
     }
-    // prefer the combined parent record ("… (N tables)"); else the first
-    const parent = members.find((m) => isParentRef(m.bookingref)) ?? members[0];
-    const children = members.filter((m) => m !== parent);
-    const tables = children.length || members.length;
+    // Real data = N sibling rows sharing one orderid, each a real table (there
+    // is NO combined "parent" record). If an explicit "… (N tables)" parent DOES
+    // exist, use it as the base and treat the other rows as the tables; otherwise
+    // every member is a real table.
+    const explicitParent = members.find((m) => isParentRef(m.bookingref));
+    const base = explicitParent ?? members[0];
+    const tableRows = explicitParent ? members.filter((m) => m !== explicitParent) : members;
+    const tables = tableRows.length;
 
-    // gather every guest QR across the group, de-duped by guest ref
+    // gather every guest QR across the whole order, de-duped by guest ref
     const seen = new Set<string>();
     const qrs: TableGuestQr[] = [];
     for (const m of members)
@@ -194,21 +198,19 @@ export function groupTableBookings(list: TableBooking[]): TableBooking[] {
         qrs.push(q);
       }
 
-    const labels = members
+    const labels = tableRows
       .map((m) => m.table?.tableLabel ?? m.areaLabel)
       .filter((x): x is string => !!x);
 
     grouped.push({
-      ...parent,
-      bookingref: isParentRef(parent.bookingref)
-        ? parent.bookingref
-        : `${parent.bookingref} (${tables} tables)`,
+      ...base,
+      bookingref: isParentRef(base.bookingref)
+        ? base.bookingref
+        : `${base.bookingref} (${tables} tables)`,
       tableCount: tables,
-      partySize: children.length
-        ? children.reduce((s, m) => s + (m.partySize || 0), 0)
-        : members.reduce((s, m) => s + (m.partySize || 0), 0),
-      areaLabel: labels.length ? Array.from(new Set(labels)).join(" · ") : parent.areaLabel,
-      guestQrcodes: qrs.length ? qrs : parent.guestQrcodes,
+      partySize: tableRows.reduce((s, m) => s + (m.partySize || 0), 0),
+      areaLabel: labels.length ? Array.from(new Set(labels)).join(" · ") : base.areaLabel,
+      guestQrcodes: qrs.length ? qrs : base.guestQrcodes,
     });
   }
   return [...grouped, ...loose];

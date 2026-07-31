@@ -587,7 +587,7 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
       {/* confirmation modal */}
       {showConfirm && (
         <div
-          className="fixed inset-0 z-70 flex items-center justify-center bg-coal/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-70 flex items-end justify-center bg-coal/80 backdrop-blur-sm sm:items-center"
           role="dialog"
           aria-modal="true"
           aria-label="Booking confirmation"
@@ -595,116 +595,114 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
         >
           <div
             data-lenis-prevent
-            className="max-h-[92svh] w-full max-w-md overflow-y-auto rounded-md border border-line bg-surface p-6"
+            className="tb-sheet max-h-[92svh] w-full max-w-md overflow-y-auto rounded-t-2xl border border-line bg-surface p-6 sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* header */}
-            <div className="mb-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-cream/40 text-cream">
-                  ✓
-                </span>
-                <p className="font-display text-lg font-semibold uppercase tracking-wide">
-                  Confirmation
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="label mb-1">
+                  Your order · {totalQty} ticket{totalQty > 1 ? "s" : ""}
+                </p>
+                <p className="line-clamp-1 font-display text-xl font-semibold uppercase leading-tight">
+                  {ev.title}
                 </p>
               </div>
               <button
                 onClick={() => !paying && setShowConfirm(false)}
                 aria-label="Close"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-elevated transition-colors hover:bg-line"
               >
                 ✕
               </button>
             </div>
 
-            {/* summary card */}
-            <div className="rounded-md border-l-2 border-cream/60 bg-elevated p-5">
-              <div className="space-y-3">
-                {lines.map((l) => (
-                  <div key={l.tickettypeid} className="flex justify-between gap-4 text-sm">
-                    <span className="font-display font-medium uppercase">{l.tickettype}</span>
-                    <span className="tabular-nums">
-                      {l.quantity} × {inr(l.ticketprice)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 space-y-3 border-t border-line pt-4 text-sm">
-                <div className="flex justify-between gap-4">
-                  <span className="font-display font-medium uppercase">Tickets subtotal</span>
-                  <span className="tabular-nums">{inrExact(subtotal)}</span>
-                </div>
-                {/* booking fee with expandable CGST/SGST breakdown */}
-                <button
-                  type="button"
-                  onClick={() => setShowFeeBreakdown((v) => !v)}
-                  className="flex w-full items-center justify-between gap-4"
-                  aria-expanded={showFeeBreakdown}
-                >
-                  <span className="flex items-center gap-1.5 font-display font-medium uppercase text-muted">
-                    Booking fee
-                    <span
-                      className={`inline-block text-xs transition-transform duration-300 ${
-                        showFeeBreakdown ? "rotate-180" : ""
-                      }`}
-                    >
-                      ▾
-                    </span>
-                  </span>
-                  <span className="tabular-nums">{inrExact(bookingFee)}</span>
-                </button>
+            {/* selected tickets */}
+            <div className="space-y-2">
+              {lines.map((l) => (
                 <div
-                  className={`grid transition-all duration-300 ${
-                    showFeeBreakdown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                  }`}
+                  key={l.tickettypeid}
+                  className="flex items-center justify-between gap-3 rounded-md border border-line p-3"
                 >
-                  <div className="overflow-hidden">
-                    <div className="space-y-2 pl-3 text-xs text-muted">
-                      <div className="flex justify-between gap-4">
-                        <span>Base fee</span>
-                        <span className="tabular-nums">{inrExact(baseprice)}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span>CGST (9%)</span>
-                        <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
-                      </div>
-                      <div className="flex justify-between gap-4">
-                        <span>SGST (9%)</span>
-                        <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
-                      </div>
+                  <span className="font-display text-sm font-medium uppercase">{l.tickettype}</span>
+                  <span className="text-sm tabular-nums text-muted">
+                    {l.quantity} × {inr(l.ticketprice)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* quote */}
+            <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted">Tickets Subtotal</dt>
+                <dd className="tabular-nums">{inrExact(subtotal)}</dd>
+              </div>
+              {/* booking fee with expandable CGST/SGST breakdown */}
+              <button
+                type="button"
+                onClick={() => setShowFeeBreakdown((v) => !v)}
+                className="flex w-full items-center justify-between gap-4"
+                aria-expanded={showFeeBreakdown}
+              >
+                <span className="flex items-center gap-1.5 text-muted">
+                  Booking Fee + GST
+                  <span
+                    className={`inline-block text-xs transition-transform duration-300 ${
+                      showFeeBreakdown ? "rotate-180" : ""
+                    }`}
+                  >
+                    ▾
+                  </span>
+                </span>
+                <span className="tabular-nums">{inrExact(bookingFee)}</span>
+              </button>
+              <div
+                className={`grid transition-all duration-300 ${
+                  showFeeBreakdown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <div className="space-y-2 pl-3 text-xs text-muted">
+                    <div className="flex justify-between gap-4">
+                      <span>Base Fee</span>
+                      <span className="tabular-nums">{inrExact(baseprice)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span>CGST (9%)</span>
+                      <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span>SGST (9%)</span>
+                      <span className="tabular-nums">{inrExact(baseprice * 0.09)}</span>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="mt-4 flex justify-between gap-4 rounded-md border border-line bg-surface px-4 py-3">
-                <span className="font-display font-semibold uppercase">Total amount</span>
-                <span className="h-display text-lg tabular-nums">{inrExact(total)}</span>
+              <div className="mt-1 flex justify-between gap-4 rounded-md border border-line bg-elevated px-4 py-3 text-base">
+                <dt className="font-display font-semibold uppercase">Total amount</dt>
+                <dd className="h-display tabular-nums">{inrExact(total)}</dd>
               </div>
-            </div>
+            </dl>
 
             {/* T&C — inline & expandable so opening it never tears down this
                 popup (no navigation). Shows the event's own terms, point by point. */}
             <TermsDisclosure terms={ev.terms} />
 
-            {error && <p className="mt-4 text-sm text-primary">{error}</p>}
+            {error && <p className="mt-3 text-sm text-primary">{error}</p>}
 
-            {/* actions */}
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                disabled={paying}
-                className="flex items-center justify-center whitespace-nowrap rounded-full border border-cream/60 px-2 py-3.5 text-xs font-medium uppercase tracking-[0.1em] text-cream transition-colors hover:bg-cream hover:text-coal disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={pay}
-                disabled={paying}
-                className="flex items-center justify-center whitespace-nowrap rounded-full bg-cream px-2 py-3.5 text-xs font-medium uppercase tracking-[0.1em] text-coal transition-colors hover:bg-primary hover:text-cream disabled:opacity-60"
-              >
-                {paying ? "Opening…" : "Continue →"}
-              </button>
-            </div>
+            <button
+              onClick={pay}
+              disabled={paying}
+              className="mt-5 w-full rounded-full bg-primary py-3.5 text-[0.8125rem] font-medium uppercase tracking-[0.14em] text-cream transition-colors duration-300 hover:bg-cream hover:text-coal disabled:opacity-50"
+            >
+              {paying ? "Opening payment…" : `Continue · ${inrExact(total)}`}
+            </button>
+            {!session && (
+              <p className="mt-2 text-center text-xs text-muted">
+                You&apos;ll sign in with your mobile number before payment.
+              </p>
+            )}
           </div>
         </div>
       )}

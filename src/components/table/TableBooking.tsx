@@ -36,7 +36,11 @@ const layoutSig = (l: TableLayout) =>
       (a.tables ?? []).map((t) => [t._id, t.pinColor, t.selectable, t.tablesLeft]),
     ])
   );
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// local calendar date (YYYY-MM-DD). NOT toISOString() — that returns the UTC
+// date, which shifts a day for IST users near midnight (today 31 showed as 30
+// and the picker wouldn't let you select the 31st).
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 type Phase = "map" | "details" | "paying" | "confirming" | "done";
 
@@ -72,6 +76,9 @@ export default function TableBooking() {
   const [empref, setEmpref] = useState(""); // optional staff referral code
   const [error, setError] = useState("");
   const [guestQrs, setGuestQrs] = useState<TableGuestQr[] | null>(null);
+  // true while entry QRs are still minting — we hold a spinner until ALL are
+  // ready, then reveal them at once (no popping-in as each one lands)
+  const [qrsLoading, setQrsLoading] = useState(false);
   const [bookingRef, setBookingRef] = useState("");
   const [orderId, setOrderId] = useState("");
 
@@ -312,7 +319,10 @@ export default function TableBooking() {
         razorpay: result.status === "razorpay" ? result : undefined,
       });
       setBookingRef(booking.bookingref ?? init.booking.bookingref);
-      setGuestQrs(booking.guestQrcodes ?? []);
+      // seed with any ready QRs from the confirm response, but keep the spinner
+      // up — the poll below waits until every guest QR has minted, then reveals
+      setGuestQrs((booking.guestQrcodes ?? []).filter((q) => q.qrcodeimage || q.qrstring));
+      setQrsLoading(true);
       setPhase("done");
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -328,23 +338,36 @@ export default function TableBooking() {
     }
   };
 
-  // on success, keep fetching until every guest QR is minted (they generate
-  // async, so the confirm response often carries only the first one)
+  // on success, keep fetching until EVERY guest QR is minted (they generate
+  // async), then reveal them all at once — no partial slider that grows as each
+  // one lands. Holds the spinner until complete or the poll gives up.
   useEffect(() => {
-    if (phase !== "done" || !orderId) return;
+    if (phase !== "done") return;
+    if (!orderId) {
+      setQrsLoading(false); // no order to poll → just show whatever confirm gave
+      return;
+    }
     let cancelled = false;
+    setQrsLoading(true);
     (async () => {
-      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
+      let best: TableGuestQr[] = [];
+      for (let attempt = 0; attempt < 8 && !cancelled; attempt++) {
         try {
           const mine = await getMyTableBookings();
           const match = mine.find((b) => b.orderid === orderId);
-          const qrs = match?.guestQrcodes ?? [];
-          if (qrs.length && !cancelled) setGuestQrs(qrs);
-          if (qrs.length >= (match?.partySize ?? partySize)) return; // all present
+          // only count QRs that actually carry a scannable code (not placeholders)
+          const ready = (match?.guestQrcodes ?? []).filter((q) => q.qrcodeimage || q.qrstring);
+          if (ready.length > best.length) best = ready;
+          const expected = match?.partySize ?? partySize;
+          if (best.length > 0 && best.length >= expected) break; // all minted
         } catch {
           /* ignore and retry */
         }
-        await new Promise((r) => setTimeout(r, 2500));
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!cancelled) {
+        if (best.length) setGuestQrs(best);
+        setQrsLoading(false); // reveal (all, or whatever we have after giving up)
       }
     })();
     return () => {
@@ -394,8 +417,15 @@ export default function TableBooking() {
           {event?.title} · {partySize} guests · Ref{" "}
           <span className="text-cream">{bookingRef}</span>
         </p>
-        {qrs.length > 0 && (
-          <div className="mx-auto mt-8 max-w-sm">
+        <div className="mx-auto mt-8 max-w-sm">
+          {qrsLoading ? (
+            <div className="rounded-lg border border-line p-8">
+              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-line border-t-primary" />
+              <p className="label !text-[0.5625rem] !text-muted">
+                Minting your entry QR{partySize > 1 ? "s" : ""}…
+              </p>
+            </div>
+          ) : qrs.length > 0 ? (
             <QrSlider
               slides={qrs.map((q) => ({
                 qrstring: q.qrstring,
@@ -406,8 +436,12 @@ export default function TableBooking() {
               unit="Guest"
               footnote={`${qrs.length} guest QR${qrs.length > 1 ? "s" : ""} · also in My Account`}
             />
-          </div>
-        )}
+          ) : (
+            <p className="label !text-[0.5625rem] !text-muted">
+              Your entry QRs will appear in My Account shortly.
+            </p>
+          )}
+        </div>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
           <Button href="/account">My bookings</Button>
           <Button href="/event" variant="outline">
@@ -632,11 +666,11 @@ export default function TableBooking() {
             {/* quote */}
             <dl className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted">Minimum spend</dt>
+                <dt className="text-muted">Minimum Spend</dt>
                 <dd className="tabular-nums">{inrExact(quote.minimumSpend)}</dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-muted">Deposit now ({depositPercent}%)</dt>
+                <dt className="text-muted">Deposit Now ({depositPercent}%)</dt>
                 <dd className="tabular-nums">{inrExact(quote.depositAmount)}</dd>
               </div>
               {/* booking fee with expandable CGST/SGST breakdown */}
@@ -647,7 +681,7 @@ export default function TableBooking() {
                 aria-expanded={showFeeBreakdown}
               >
                 <span className="flex items-center gap-1.5 text-muted">
-                  Booking fee + GST
+                  Booking Fee + GST
                   <span
                     className={`inline-block text-xs transition-transform duration-300 ${
                       showFeeBreakdown ? "rotate-180" : ""
@@ -666,7 +700,7 @@ export default function TableBooking() {
                 <div className="overflow-hidden">
                   <div className="space-y-2 pl-3 text-xs text-muted">
                     <div className="flex justify-between gap-4">
-                      <span>Base fee</span>
+                      <span>Base Fee</span>
                       <span className="tabular-nums">{inrExact(quote.bookingFee)}</span>
                     </div>
                     <div className="flex justify-between gap-4">
@@ -681,7 +715,7 @@ export default function TableBooking() {
                 </div>
               </div>
               <div className="mt-1 flex justify-between gap-4 rounded-md border border-line bg-elevated px-4 py-3 text-base">
-                <dt className="font-display font-semibold uppercase">Pay now</dt>
+                <dt className="font-display font-semibold uppercase">Pay Now</dt>
                 <dd className="h-display tabular-nums">{inrExact(quote.payNowAmount)}</dd>
               </div>
               <p className="text-[0.6875rem] text-muted">
