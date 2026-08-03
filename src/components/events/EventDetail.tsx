@@ -26,6 +26,32 @@ export default function EventDetail() {
   // About + Terms are collapsed by default (they're long) — expand on tap
   const [openAbout, setOpenAbout] = useState(false);
   const [openTerms, setOpenTerms] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // native share sheet where available, else copy the link with feedback
+  const shareEvent = async () => {
+    if (!event) return;
+    const url = `${window.location.origin}/event/view?id=${event._id}`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: event.title,
+          text: `${event.title} · 2BHK Diner & Key Club`,
+          url,
+        });
+      } catch {
+        /* user dismissed the share sheet */
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     if (event) document.title = `${event.title} — 2BHK`;
@@ -87,11 +113,32 @@ export default function EventDetail() {
     <div className="mx-auto max-w-7xl px-5 pb-20 pt-28 md:px-8 md:pt-36">
       {/* header */}
       <Reveal>
-        <p className="label mb-4">
-          <TransitionLink href="/event" className="transition-colors hover:text-primary">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <TransitionLink href="/event" className="label transition-colors hover:text-primary">
             ← All events
           </TransitionLink>
-        </p>
+          <button
+            type="button"
+            onClick={shareEvent}
+            aria-label="Share this event"
+            className="label flex items-center gap-2 rounded-full border border-line px-4 py-2 !text-cream transition-colors hover:border-primary hover:!text-primary"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden
+            >
+              <circle cx="18" cy="5" r="3" />
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="19" r="3" />
+              <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" strokeLinecap="round" />
+            </svg>
+            {copied ? "Link copied" : "Share"}
+          </button>
+        </div>
         <div className="grid gap-8 md:grid-cols-2 md:items-end">
           <div>
             <p className="label mb-3 flex items-center gap-2 !text-primary">

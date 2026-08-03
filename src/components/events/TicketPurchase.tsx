@@ -189,10 +189,13 @@ export default function TicketPurchase({ event }: { event: RizztixEvent }) {
     }
   }, [qty, cartKey]);
 
-  // reopen the confirmation popup on return — after login OR after viewing Terms
+  // reopen the confirmation popup on return from login (resumeKey is set by
+  // goLogin). Key off resumeKey ALONE — the cart is restored by its own effect,
+  // and checking cartKey here raced with the persist effect (which clears it on
+  // the first empty render) and left the popup closed after login.
   useEffect(() => {
     try {
-      if (sessionStorage.getItem(resumeKey) && sessionStorage.getItem(cartKey)) {
+      if (sessionStorage.getItem(resumeKey)) {
         sessionStorage.removeItem(resumeKey);
         setShowConfirm(true);
       }

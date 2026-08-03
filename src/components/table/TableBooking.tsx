@@ -244,6 +244,19 @@ export default function TableBooking() {
   const pay = async () => {
     if (!layout || selected.length === 0 || !quote) return;
     if (!session) {
+      // remember the selection so it's restored + the sheet reopens after login
+      try {
+        sessionStorage.setItem(
+          `bhk:tableresume:${eventId}`,
+          JSON.stringify({
+            tables: selected.map((s) => ({ zoneId: s.zone._id, tableId: s.table._id, pax: s.pax })),
+            men: menCount,
+            empref,
+          })
+        );
+      } catch {
+        /* ignore */
+      }
       router.push(`/login?next=${encodeURIComponent(`/event/table?event=${eventId}`)}`);
       return;
     }
@@ -482,6 +495,48 @@ export default function TableBooking() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  // after login, restore the table selection + reopen the sheet (persisted in
+  // pay() when the user tapped "Book now" while signed out)
+  const tableResumedRef = useRef(false);
+  useEffect(() => {
+    if (tableResumedRef.current || !layout) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(`bhk:tableresume:${eventId}`);
+    } catch {
+      /* ignore */
+    }
+    if (!raw) return;
+    tableResumedRef.current = true;
+    try {
+      sessionStorage.removeItem(`bhk:tableresume:${eventId}`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      const saved = JSON.parse(raw) as {
+        tables: { zoneId: string; tableId: string; pax: number }[];
+        men?: number;
+        empref?: string;
+      };
+      const restored: { zone: TableZone; table: TableSpot; pax: number }[] = [];
+      for (const t of saved.tables ?? []) {
+        const zone = layout.areas.find((z) => z._id === t.zoneId);
+        const table = zone?.tables?.find((tb) => tb._id === t.tableId);
+        if (zone && table) restored.push({ zone, table, pax: t.pax });
+      }
+      if (restored.length) {
+        setSelected(restored);
+        setMen(saved.men ?? 0);
+        setEmpref(saved.empref ?? "");
+        setShowModal(true);
+      }
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout]);
 
   // on success, keep fetching until EVERY guest QR is minted (they generate
   // async), then reveal them all at once — no partial slider that grows as each
@@ -798,7 +853,7 @@ export default function TableBooking() {
               <input
                 id="empref"
                 value={empref}
-                onChange={(e) => setEmpref(e.target.value.toUpperCase().slice(0, 32))}
+                onChange={(e) => setEmpref(e.target.value.replace(/\s/g, "").toUpperCase().slice(0, 32))}
                 placeholder="e.g. STAFF01"
                 autoCapitalize="characters"
                 className="w-full rounded-md border border-line bg-transparent px-3 py-2.5 text-base uppercase tracking-wide text-cream placeholder:normal-case placeholder:text-muted/50 focus:border-primary focus:outline-none sm:text-sm"
